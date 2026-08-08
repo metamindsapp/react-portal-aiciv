@@ -4,18 +4,22 @@ on:
   pull_request:
     paths:
       - "presence_bridge.py"
+      - "aiciv_inbox.py"
       - "portal_entrypoint.py"
       - "start.sh"
       - "test_presence_bridge.py"
+      - "test_aiciv_inbox.py"
       - "react-portal/**"
       - ".github/workflows/portal-voice-ci.yml"
   push:
     branches: [main]
     paths:
       - "presence_bridge.py"
+      - "aiciv_inbox.py"
       - "portal_entrypoint.py"
       - "start.sh"
       - "test_presence_bridge.py"
+      - "test_aiciv_inbox.py"
       - "react-portal/**"
       - ".github/workflows/portal-voice-ci.yml"
 
@@ -33,10 +37,12 @@ jobs:
           python-version: "3.12"
       - name: Install focused Portal test dependencies
         run: pip install starlette httpx
-      - name: Compile Presence bridge and wrapper
-        run: python -m py_compile presence_bridge.py portal_entrypoint.py
+      - name: Compile AICIV extension modules
+        run: python -m py_compile presence_bridge.py aiciv_inbox.py portal_entrypoint.py
       - name: Run Presence bridge tests
         run: python test_presence_bridge.py
+      - name: Run shared AICIV inbox tests
+        run: python test_aiciv_inbox.py
 
   frontend:
     runs-on: ubuntu-latest
