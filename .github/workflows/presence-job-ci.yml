@@ -1,0 +1,29 @@
+name: Presence Job Skill CI
+
+on:
+  pull_request:
+    paths:
+      - "skills/presence-job/**"
+      - ".github/workflows/presence-job-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "skills/presence-job/**"
+      - ".github/workflows/presence-job-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test-presence-job:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile callback helper
+        run: python -m py_compile skills/presence-job/presence_job.py
+      - name: Run callback helper tests
+        run: python skills/presence-job/test_presence_job.py
