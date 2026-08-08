@@ -7,7 +7,6 @@ import { useBookmarkStore } from '../../stores/bookmarkStore'
 import type { ChatMessage } from '../../types/chat'
 import './MessageBubble.css'
 
-// Full sentiment-mapped emojis with weights
 const REACTION_EMOJIS: { emoji: string; name: string; weight: number }[] = [
   { emoji: '\u{1F44D}', name: 'thumbs-up', weight: 1 },
   { emoji: '\u{1F44E}', name: 'thumbs-down', weight: -1 },
@@ -25,7 +24,6 @@ const REACTION_EMOJIS: { emoji: string; name: string; weight: number }[] = [
   { emoji: '\u{1F610}', name: 'neutral', weight: 0 },
 ]
 
-// Extract fenced code blocks from message text
 interface CodeBlock {
   language: string
   content: string
@@ -60,8 +58,6 @@ export const MessageBubble = memo(function MessageBubble({ message, onReact, hig
   const isBookmarked = useBookmarkStore(s => s.isBookmarked(message.id))
   const addBookmark = useBookmarkStore(s => s.add)
   const removeBookmark = useBookmarkStore(s => s.remove)
-
-  // Track client-side reactions for display
   const [localReactions, setLocalReactions] = useState<{ emoji: string; weight: number }[]>([])
 
   const handleReact = (emoji: string, weight: number) => {
@@ -75,11 +71,8 @@ export const MessageBubble = memo(function MessageBubble({ message, onReact, hig
   const codeBlocks = extractCodeBlocks(message.text)
 
   const toggleBookmark = () => {
-    if (isBookmarked) {
-      removeBookmark(message.id)
-    } else {
-      addBookmark(message)
-    }
+    if (isBookmarked) removeBookmark(message.id)
+    else addBookmark(message)
   }
 
   const handleMouseEnter = useCallback(() => {
@@ -96,6 +89,7 @@ export const MessageBubble = memo(function MessageBubble({ message, onReact, hig
 
   return (
     <div
+      id={`message-${message.id}`}
       className={cn('msg-row', isUser && 'msg-row-user', highlight && 'msg-row-highlight')}
     >
       <div
@@ -122,7 +116,6 @@ export const MessageBubble = memo(function MessageBubble({ message, onReact, hig
           </ReactMarkdown>
         </div>
 
-        {/* Artifact preview buttons */}
         {codeBlocks.length > 0 && onPreviewArtifact && (
           <div className="msg-preview-buttons">
             {codeBlocks.map((block, i) => (
@@ -143,7 +136,6 @@ export const MessageBubble = memo(function MessageBubble({ message, onReact, hig
           </div>
         )}
 
-        {/* Reaction badges */}
         {localReactions.length > 0 && (
           <div className="msg-reaction-badges">
             {localReactions.map(r => (

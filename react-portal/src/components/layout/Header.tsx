@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useIdentityStore } from '../../stores/identityStore'
 import { StatusBadge } from '../common/StatusBadge'
+import { CommandPalette } from '../command/CommandPalette'
 import { GlobalPresenceControl } from '../presence/GlobalPresenceControl'
 import { apiGet } from '../../api/client'
 import { Link } from 'react-router-dom'
@@ -18,7 +19,6 @@ function ctxColor(pct: number): string {
   return 'var(--status-error)'
 }
 
-/** Mini SVG ring for the header */
 function CtxRing({ pct }: { pct: number }) {
   const r = 12
   const circ = 2 * Math.PI * r
@@ -80,6 +80,7 @@ export function Header() {
         <span className="header-subtitle">Portal</span>
       </div>
       <div className="header-right">
+        <CommandPalette />
         <GlobalPresenceControl />
         {ctx != null && (
           <Link to="/context" className="header-ctx-link" title="Context window — click for details">
