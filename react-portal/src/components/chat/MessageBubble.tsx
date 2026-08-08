@@ -46,7 +46,7 @@ function extractCodeBlocks(text: string): CodeBlock[] {
 
 interface MessageBubbleProps {
   message: ChatMessage
-  onReact: (emoji: string) => void
+  onReact: (emoji: string, action: 'add' | 'remove') => void
   highlight?: boolean
   onPreviewArtifact?: (content: string, language: string) => void
 }
@@ -58,21 +58,12 @@ export const MessageBubble = memo(function MessageBubble({ message, onReact, hig
   const isBookmarked = useBookmarkStore(s => s.isBookmarked(message.id))
   const addBookmark = useBookmarkStore(s => s.add)
   const removeBookmark = useBookmarkStore(s => s.remove)
-  const [localReactions, setLocalReactions] = useState<{ emoji: string; weight: number }[]>([])
-
-  const handleReact = (emoji: string, weight: number) => {
-    onReact(emoji)
-    setLocalReactions(prev => {
-      if (prev.some(r => r.emoji === emoji)) return prev
-      return [...prev, { emoji, weight }]
-    })
-  }
-
   const codeBlocks = extractCodeBlocks(message.text)
+  const reactions = message.reactions || []
 
   const toggleBookmark = () => {
-    if (isBookmarked) removeBookmark(message.id)
-    else addBookmark(message)
+    if (isBookmarked) void removeBookmark(message.id)
+    else void addBookmark(message)
   }
 
   const handleMouseEnter = useCallback(() => {
@@ -136,18 +127,26 @@ export const MessageBubble = memo(function MessageBubble({ message, onReact, hig
           </div>
         )}
 
-        {localReactions.length > 0 && (
-          <div className="msg-reaction-badges">
-            {localReactions.map(r => (
-              <span key={r.emoji} className="msg-reaction-badge">
-                {r.emoji} <span className="msg-reaction-score">{r.weight > 0 ? `+${r.weight}` : r.weight}</span>
-              </span>
+        {reactions.length > 0 && (
+          <div className="msg-reaction-badges" aria-label="Shared reactions">
+            {reactions.map(reaction => (
+              <button
+                key={reaction.emoji}
+                type="button"
+                className={cn('msg-reaction-badge', reaction.mine && 'msg-reaction-badge-mine')}
+                onClick={() => onReact(reaction.emoji, reaction.mine ? 'remove' : 'add')}
+                title={reaction.mine ? 'Remove your reaction' : 'Add this reaction'}
+              >
+                {reaction.emoji}
+                <span className="msg-reaction-score">{reaction.count}</span>
+              </button>
             ))}
           </div>
         )}
 
         <div className="msg-meta">
           <span className="msg-time">{formatRelativeTime(message.timestamp)}</span>
+          {isBookmarked && <span className="msg-shared-reference" title="Saved as a shared AICIV reference">Shared reference</span>}
         </div>
 
         {showReactions && (
@@ -155,21 +154,26 @@ export const MessageBubble = memo(function MessageBubble({ message, onReact, hig
             <button
               className={cn('msg-bookmark-btn', isBookmarked && 'msg-bookmark-active')}
               onClick={toggleBookmark}
-              title={isBookmarked ? 'Remove bookmark' : 'Bookmark'}
+              title={isBookmarked ? 'Remove shared reference' : 'Save as shared reference'}
+              aria-pressed={isBookmarked}
             >
               {isBookmarked ? '\u{1F4CC}' : '\u{1F4CB}'}
             </button>
             <div className="msg-reactions-picker">
-              {REACTION_EMOJIS.map(r => (
-                <button
-                  key={r.emoji}
-                  className="msg-reaction-btn"
-                  onClick={() => handleReact(r.emoji, r.weight)}
-                  title={`${r.name} (${r.weight > 0 ? '+' : ''}${r.weight})`}
-                >
-                  {r.emoji}
-                </button>
-              ))}
+              {REACTION_EMOJIS.map(reaction => {
+                const existing = reactions.find(item => item.emoji === reaction.emoji)
+                return (
+                  <button
+                    key={reaction.emoji}
+                    className={cn('msg-reaction-btn', existing?.mine && 'msg-reaction-btn-active')}
+                    onClick={() => onReact(reaction.emoji, existing?.mine ? 'remove' : 'add')}
+                    title={`${existing?.mine ? 'Remove' : 'Add'} ${reaction.name}`}
+                    aria-pressed={Boolean(existing?.mine)}
+                  >
+                    {reaction.emoji}
+                  </button>
+                )
+              })}
             </div>
           </div>
         )}
