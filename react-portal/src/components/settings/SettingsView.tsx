@@ -6,14 +6,25 @@ import { cn } from '../../utils/cn'
 import type { Theme } from '../../types/settings'
 import './SettingsView.css'
 
+function formatExpiry(expiresAt: number | null): string {
+  if (!expiresAt) return 'Unknown'
+  const remaining = expiresAt - Date.now()
+  if (remaining <= 0) return 'Expired'
+  const hours = Math.floor(remaining / 3_600_000)
+  const minutes = Math.floor((remaining % 3_600_000) / 60_000)
+  const absolute = new Date(expiresAt).toLocaleString()
+  return `${absolute} (${hours > 0 ? `${hours}h ` : ''}${minutes}m remaining)`
+}
+
 export function SettingsView() {
   const { theme, setTheme, quickfirePills, setQuickfirePills, boopEnabled, setBoopEnabled } = useSettingsStore()
-  const { logout } = useAuthStore()
+  const authenticated = useAuthStore(s => s.authenticated)
+  const expiresAt = useAuthStore(s => s.expiresAt)
+  const sessionMode = useAuthStore(s => s.sessionMode)
+  const logout = useAuthStore(s => s.logout)
   const { civName, humanName, status } = useIdentityStore()
 
-  const handleThemeToggle = (t: Theme) => {
-    setTheme(t)
-  }
+  const handleThemeToggle = (t: Theme) => setTheme(t)
 
   const handleBoopToggle = async () => {
     const next = !boopEnabled
@@ -21,7 +32,7 @@ export function SettingsView() {
       await toggleBoop(next)
       setBoopEnabled(next)
     } catch {
-      // silently fail
+      // The global correlated Error Center carries API failures.
     }
   }
 
@@ -55,6 +66,37 @@ export function SettingsView() {
             <span className="settings-label">Version</span>
             <span className="settings-value">{status?.version || '—'}</span>
           </div>
+        </div>
+      </section>
+
+      <section className="settings-section">
+        <h3>Browser Security</h3>
+        <div className="settings-info">
+          <div className="settings-row">
+            <span className="settings-label">Authentication</span>
+            <span className="settings-value">
+              {authenticated
+                ? sessionMode === 'http_only_cookie'
+                  ? 'Short-lived HttpOnly session'
+                  : 'Authenticated'
+                : 'Not authenticated'}
+            </span>
+          </div>
+          <div className="settings-row">
+            <span className="settings-label">Session expires</span>
+            <span className="settings-value">{authenticated ? formatExpiry(expiresAt) : '—'}</span>
+          </div>
+          <div className="settings-security-note">
+            The long-lived Portal bootstrap credential is exchanged once. Normal browser HTTP/WebSocket traffic uses the short-lived same-origin session instead.
+          </div>
+          <button
+            className="settings-logout"
+            onClick={() => void logout()}
+            disabled={!authenticated}
+            title="Revoke this browser's server-side Portal session and return to login"
+          >
+            Revoke this browser session
+          </button>
         </div>
       </section>
 
@@ -109,12 +151,6 @@ export function SettingsView() {
             AiCIV Chronicles (Blog)
           </a>
         </div>
-      </section>
-
-      <section className="settings-section">
-        <button className="settings-logout" onClick={logout}>
-          Logout
-        </button>
       </section>
     </div>
   )
