@@ -7,19 +7,42 @@ interface MessageListProps {
   messages: ChatMessage[]
   onReact: (msgId: string, emoji: string, text: string, role: 'user' | 'assistant') => void
   highlightIds?: Set<string>
+  focusMessageId?: string | null
+  onFocusHandled?: () => void
   onPreviewArtifact?: (content: string, language: string) => void
 }
 
-export function MessageList({ messages, onReact, highlightIds, onPreviewArtifact }: MessageListProps) {
+export function MessageList({
+  messages,
+  onReact,
+  highlightIds,
+  focusMessageId,
+  onFocusHandled,
+  onPreviewArtifact,
+}: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const autoScrollRef = useRef(true)
 
   useEffect(() => {
+    if (focusMessageId) return
     if (autoScrollRef.current) {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
-  }, [messages])
+  }, [focusMessageId, messages])
+
+  useEffect(() => {
+    if (!focusMessageId) return
+    const exists = messages.some(message => message.id === focusMessageId)
+    if (!exists) return
+
+    const timer = window.setTimeout(() => {
+      const node = document.getElementById(`message-${focusMessageId}`)
+      node?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      onFocusHandled?.()
+    }, 40)
+    return () => window.clearTimeout(timer)
+  }, [focusMessageId, messages, onFocusHandled])
 
   const handleScroll = () => {
     const el = containerRef.current
