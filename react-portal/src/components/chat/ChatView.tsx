@@ -13,6 +13,8 @@ export function ChatView() {
   const messages = useChatStore(s => s.messages)
   const loading = useChatStore(s => s.loading)
   const sending = useChatStore(s => s.sending)
+  const focusMessageId = useChatStore(s => s.focusMessageId)
+  const setFocusMessageId = useChatStore(s => s.setFocusMessageId)
   const loadHistory = useChatStore(s => s.loadHistory)
   const send = useChatStore(s => s.send)
   const react = useChatStore(s => s.react)
@@ -52,16 +54,16 @@ export function ChatView() {
   }
 
   const { matchCount, highlightIds } = useMemo(() => {
-    if (!searchQuery.trim()) return { matchCount: 0, highlightIds: new Set<string>() }
-    const q = searchQuery.toLowerCase()
     const ids = new Set<string>()
-    for (const msg of messages) {
-      if (msg.text.toLowerCase().includes(q)) {
-        ids.add(msg.id)
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase()
+      for (const msg of messages) {
+        if (msg.text.toLowerCase().includes(q)) ids.add(msg.id)
       }
     }
-    return { matchCount: ids.size, highlightIds: ids }
-  }, [messages, searchQuery])
+    if (focusMessageId) ids.add(focusMessageId)
+    return { matchCount: searchQuery.trim() ? ids.size : 0, highlightIds: ids }
+  }, [focusMessageId, messages, searchQuery])
 
   return (
     <div className={`chat-view ${artifactOpen ? 'chat-with-artifact' : ''}`}>
@@ -101,7 +103,14 @@ export function ChatView() {
             />
           </div>
         ) : (
-          <MessageList messages={messages} onReact={react} highlightIds={highlightIds} onPreviewArtifact={handlePreviewArtifact} />
+          <MessageList
+            messages={messages}
+            onReact={react}
+            highlightIds={highlightIds}
+            focusMessageId={focusMessageId}
+            onFocusHandled={() => window.setTimeout(() => setFocusMessageId(null), 1800)}
+            onPreviewArtifact={handlePreviewArtifact}
+          />
         )}
         <ChatInput onSend={send} onUpload={handleUpload} sending={sending} />
       </div>
