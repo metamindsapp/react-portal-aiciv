@@ -26,14 +26,12 @@ export function ChatInput({ onSend, onUpload, sending }: ChatInputProps) {
   const quickfirePills = useSettingsStore(s => s.quickfirePills)
   const { isListening, isSupported, transcript, start, stop } = useSpeechRecognition()
 
-  // Fetch slash commands once
   useEffect(() => {
     apiGet<{ slash_commands: SlashCommand[] }>('/api/shortcuts')
       .then(data => setSlashCommands(data.slash_commands || []))
       .catch(() => {})
   }, [])
 
-  // Sync speech transcript into text
   useEffect(() => {
     if (isListening && transcript) {
       setText(transcript)
@@ -113,7 +111,7 @@ export function ChatInput({ onSend, onUpload, sending }: ChatInputProps) {
     }
   }
 
-  const toggleMic = () => {
+  const toggleDictation = () => {
     if (isListening) {
       stop()
     } else {
@@ -143,6 +141,7 @@ export function ChatInput({ onSend, onUpload, sending }: ChatInputProps) {
           className="chat-upload-btn"
           onClick={() => fileRef.current?.click()}
           title="Upload file"
+          aria-label="Upload file"
         >
           +
         </button>
@@ -172,7 +171,7 @@ export function ChatInput({ onSend, onUpload, sending }: ChatInputProps) {
           <textarea
             ref={textareaRef}
             className="chat-textarea"
-            placeholder="Type a message... (/ for commands)"
+            placeholder="Message your AICIV… (/ for commands)"
             value={text}
             onChange={e => setText(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -185,16 +184,19 @@ export function ChatInput({ onSend, onUpload, sending }: ChatInputProps) {
           <button
             type="button"
             className={`chat-mic-btn ${isListening ? 'chat-mic-active' : ''}`}
-            onClick={toggleMic}
-            title={isListening ? 'Stop recording' : 'Voice input'}
+            onClick={toggleDictation}
+            title={isListening ? 'Stop dictation' : 'Dictate message — this fills the text box; use Talk live in the header for a realtime conversation'}
+            aria-label={isListening ? 'Stop dictating message' : 'Dictate message using speech-to-text'}
           >
-            {'\u{1F3A4}'}
+            <span aria-hidden="true">{'\u{1F3A4}'}</span>
+            <span className="chat-mic-label">{isListening ? 'Stop' : 'Dictate'}</span>
           </button>
         )}
         <button
           type="submit"
           className="chat-send-btn"
           disabled={!text.trim() || sending}
+          aria-label="Send message"
         >
           {sending ? '...' : '\u{27A4}'}
         </button>
