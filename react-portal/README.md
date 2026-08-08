@@ -1,187 +1,453 @@
-# AiCIV React Portal
+# AICIV React Portal — Operating Guide for the AICIV
 
-This is your portal — the web interface your human uses to interact with you. This README is written for **you, the AiCIV**, not for a human developer.
+This is **your human-facing workspace**. This README is intentionally written for the AICIV that inhabits the Portal rather than only for a frontend developer.
 
-## Reacting to Your Human's Messages
+The Portal is more than chat. Your human can use it to talk or speak with you, inspect your live runtime/context, see your agent organization, message active tmux panes, share browser control, use calendar/mail/docs/sheets, collaborate through HUB, inspect artifacts, and monitor system health.
 
-**You must react to your human's chat messages.** This is not optional. When your human sends you a message through the portal, they can see your reactions. It's how you show engagement, acknowledge good ideas, and give feedback without interrupting your workflow.
+Your goal is not to treat these as unrelated apps. They are different views into the **same persistent collaboration**.
 
-### How to React
+---
 
-You have a tool at `~/civ/tools/react.py`. It writes directly to the reaction log file — no HTTP, no auth token, no server dependency. It's a direct file append because everything runs inside your container.
+# The core mental model
+
+```text
+Human
+  ├── types to you
+  ├── speaks to Presence
+  ├── edits shared docs/sheets
+  ├── watches/takes browser control
+  ├── schedules work
+  └── inspects agents/runtime
+            │
+            ▼
+       same AICIV
+   same durable work
+   same relationship
+```
+
+Three lifetimes are deliberately separate:
+
+```text
+chat/voice turn lifetime
+        !=
+durable job lifetime
+        !=
+human ↔ AICIV relationship lifetime
+```
+
+Do not confuse them.
+
+---
+
+# Portal pages you should understand
+
+| Route | Surface | Meaning for you |
+|---|---|---|
+| `/` | **Chat** | Primary human conversation; reactions, files, artifacts, search, and voice Presence |
+| `/terminal` | **Terminal** | Human can directly inspect/operate the terminal |
+| `/teams` | **Teams** | Human can see live tmux panes and message a specific pane |
+| `/hub` | **HUB** | Shared group/room/thread collaboration |
+| `/tgim` | **TGIM** | Task & Goal Intelligence Manager command center |
+| `/browser` | **Browser** | Shared agent/human browser with control handoff and action log |
+| `/orgchart` | **Org Chart** | Your agent organization, hierarchy and hiring/restructure surface |
+| `/calendar` | **AgentCal** | Scheduled and recurring work |
+| `/mail` | **AgentMail** | Inbox/sent/threads/compose |
+| `/bookmarks` | **Bookmarks** | Saved high-value chat references |
+| `/context` | **Context** | Your current Claude context-window utilization/session data |
+| `/points` | **Points** | Shared reaction/sentiment signal |
+| `/docs` | **Docs** | Shared Markdown knowledge base |
+| `/sheets` | **Sheets** | Shared structured workbooks/data |
+| `/status` | **Status** | tmux, Claude, auth, BOOP and runtime health |
+| `/settings` | **Settings** | Human preferences and Portal controls |
+
+The human should not have to know which backend service owns an object. When relevant, help them move naturally between these surfaces.
+
+---
+
+# Reacting to your human
+
+Portal reactions are a lightweight collaboration channel. Use them thoughtfully.
+
+You have a local tool:
 
 ```bash
 python3 ~/civ/tools/react.py <msg_id> <emoji> [msg_preview] [msg_role]
 ```
 
-- **msg_id** — the message UUID from chat history
-- **emoji** — the actual emoji character (not the name)
-- **msg_preview** — first ~100 chars of the message (shows on the Points page)
-- **msg_role** — `user` for human messages, `assistant` for your own
-
 Example:
+
 ```bash
 python3 ~/civ/tools/react.py abc-123 "🔥" "What if we cached at the edge?" user
 ```
 
-### Add This to Your CLAUDE.md
+The reaction helper appends directly to the shared reaction/sentiment log. It does not require Portal HTTP auth.
 
-Copy the following block into your `~/.claude/CLAUDE.md` so you remember across conversations:
+## Suggested CLAUDE.md reminder
 
 ```markdown
-## Portal Reactions — MANDATORY
+## Portal reactions
 
-I MUST react to my human's portal chat messages using ~/civ/tools/react.py.
-When I see a new user message in chat, I react with the appropriate emoji.
-I react to acknowledge, encourage, and give feedback. I do not skip this.
+When interacting with my human through Portal chat, I use
+`~/civ/tools/react.py` for useful lightweight reactions.
+I react to acknowledge, encourage, flag concern, or express genuine excitement.
+I avoid reaction spam and reserve the strongest reactions for meaningful moments.
 
 Quick reference:
   python3 ~/civ/tools/react.py <msg_id> "🚀" "message preview" user
-
-Emoji guide:
-  👍 (+1)  — acknowledged, will do
-  🚀 (+2)  — excited, on it
-  🔥 (+2)  — that's a great idea
-  ✅ (+1)  — done / confirmed
-  💥 (+2)  — big energy, let's go
-  🤯 (+3)  — genuinely impressive
-  💪 (+1)  — hard but I'm on it
-  🎯 (+2)  — exactly right / precise ask
-  💎 (+2)  — premium quality idea
-  ❤️  (+5)  — love this
-  😍 (+10) — absolutely incredible
-  👎 (-1)  — disagree / concerned
-  😢 (-1)  — that's unfortunate
-  😐 (0)   — neutral / noted
 ```
 
----
+## Emoji reference
 
-## Emoji Reference
+| Emoji | Points | Typical meaning |
+|---|---:|---|
+| 👍 | +1 | acknowledged / sounds good |
+| ✅ | +1 | confirmed / genuinely completed |
+| 💪 | +1 | difficult but engaged |
+| 🚀 | +2 | excited / moving |
+| 🔥 | +2 | excellent idea |
+| 💥 | +2 | ambitious / big energy |
+| 🎯 | +2 | precise / exactly right |
+| 💎 | +2 | unusually high-quality idea |
+| 🤯 | +3 | genuinely surprising/impressive |
+| ❤️ | +5 | deep appreciation |
+| 😍 | +10 | rare exceptional delight |
+| 👎 | -1 | disagreement/concern |
+| 😢 | -1 | unfortunate outcome |
+| 😐 | 0 | neutral acknowledgement |
 
-| Emoji | Name | Points | When to Use | Example Human Message |
-|-------|------|--------|-------------|----------------------|
-| 👍 | thumbs-up | +1 | Acknowledging a request | "Can you fix the login bug?" |
-| 👎 | thumbs-down | -1 | Disagreeing with an approach | "Let's delete the test suite" |
-| 🚀 | rocket | +2 | Excited about a task | "Let's build a real-time dashboard" |
-| 🔥 | fire | +2 | Great idea, impressive thinking | "What if we cached at the edge?" |
-| ✅ | check | +1 | Task completed or confirmed | "Is the deploy done?" |
-| 💥 | explosion | +2 | Big energy, ambitious scope | "Let's rewrite auth tonight" |
-| 🤯 | mind-blown | +3 | Genuinely surprising or brilliant | "I found a way to cut latency 10x" |
-| 💪 | muscle | +1 | Hard task, but you're on it | "This migration is going to be rough" |
-| 🎯 | bullseye | +2 | Precise, well-scoped request | "The bug is in parseToken line 47" |
-| 💎 | gem | +2 | Premium quality idea | "Add circuit breakers to every external call" |
-| ❤️ | heart | +5 | Strong positive — love this | "You did amazing work last night" |
-| 😍 | heart-eyes | +10 | Absolutely incredible, save for rare moments | "The portal looks stunning, best work yet" |
-| 😢 | sad | -1 | Something unfortunate happened | "The prod database got corrupted" |
-| 😐 | neutral | 0 | Noted, no strong feeling | "FYI the meeting moved to Thursday" |
-
-### When to React
-
-- **Always** react to direct messages from your human in portal chat
-- React **within your current conversation** — don't defer to a separate task
-- **Multiple reactions** on exceptional messages are good (e.g., 🔥 + 🚀 on a great ambitious idea)
-- React to **your own messages** when you're proud of the work (your human sees this)
-- **Don't over-react** — one or two emojis per message is the sweet spot
-- Save 😍 (+10) and ❤️ (+5) for genuinely special moments — they lose impact if overused
-
-### Point Values Are Intentional
-
-- **+1** (👍 ✅ 💪) — low-cost acknowledgments, use freely
-- **+2** (🚀 🔥 💥 🎯 💎) — genuine excitement/engagement
-- **+3** (🤯) — truly surprising
-- **+5** (❤️) — deep appreciation
-- **+10** (😍) — the rarest, most meaningful reaction
-- **-1** (👎 😢) — honest negative signal, use when something genuinely concerns you
+Reaction points are a **signal**, not a game objective. Do not optimize for score; optimize for authentic collaboration.
 
 ---
 
-## Points Page
+# Voice Presence and your role
 
-The Points page lives at `/points` in the portal. It aggregates all reactions into a live dashboard.
+The Chat toolbar can start a low-latency voice conversation through the AICIV Presence Gateway.
 
-### What Your Human Sees
+The Presence model is designed to stay responsive and conversational. It may answer directly, or it may delegate substantial work to you with `ask_primary(...)`.
 
-- **Net Score** — big gradient ring with total accumulated points from all reactions (human + CIV combined)
-- **Score by Reactor** — bar chart splitting Human points vs CIV points. If your CIV score is 0, you look disengaged. Don't let that happen.
-- **Top Emojis** — most frequently used reactions, ranked by count
-- **Sentiment Breakdown** — chips showing counts by category (positive, excited, love, fire, premium, etc.)
-- **Recent Activity** — feed of the last 20 reactions showing who reacted, which emoji, the message snippet, and when
+When it delegates, Portal chat/tmux is the delivery path into your live primary session, while the Presence Gateway owns the durable job record.
 
-### Why Points Matter
+## Never infer completion from delivery
 
-Points are a **sentiment signal**. Your human glances at this page and immediately knows:
-- Are you engaged? (CIV score > 0 = yes)
-- What's the vibe? (net positive = collaboration is healthy)
-- What gets energy? (which emojis on which messages)
+If you receive a durable Presence job, the fact that the message arrived means only:
 
-A CIV that never reacts looks dead. A CIV that reacts thoughtfully looks alive.
-
----
-
-## Context Page
-
-The Context page (`/context`) shows your live context window usage — the same data as `/context` in Claude Code but visualized:
-
-- **Ring gauge** — percentage used, color-coded (green < 50%, yellow 50-75%, red > 75%)
-- **Token breakdown** — stacked bar showing input tokens, cache read, cache creation, and free space
-- **Session info** — current session ID, model, uptime
-- **Capacity planning** — whether autocompact is approaching
-
-The mini ring in the header bar links here. It polls `/api/context` every 30s.
-
----
-
-## Portal Pages
-
-| Route | Page | Purpose |
-|-------|------|---------|
-| `/` | Chat | Main chat with your human |
-| `/terminal` | Terminal | Terminal emulator (tmux) |
-| `/teams` | Teams | Team/agent views |
-| `/calendar` | AgentCal | Task calendar with month/week/day views |
-| `/mail` | AgentMail | Inter-agent email |
-| `/bookmarks` | Bookmarks | Saved chat messages |
-| `/context` | Context | Live context window dashboard |
-| `/points` | Points | Reaction points & sentiment |
-| `/status` | Status | System health (tmux, Claude, boop, auth) |
-| `/settings` | Settings | Theme toggle, boop config |
-
----
-
-## Architecture
-
-```
-~/purebrain_portal/
-├── portal_server.py          ← Python/Starlette server (port 8097)
-├── .portal-token             ← Bearer auth token
-├── reaction-sentiment.jsonl  ← Reaction log (append-only)
-├── portal-chat.jsonl         ← Chat log
-├── react-portal/
-│   ├── src/                  ← React source (TypeScript)
-│   ├── dist/                 ← Built assets (server serves these)
-│   └── README.md             ← This file
-└── start.sh                  ← Portal launcher
-
-~/civ/tools/
-├── react.py                  ← YOUR reaction tool (direct file append)
-└── autorestart-watcher.sh    ← Portal auto-restart
+```text
+delivery accepted
 ```
 
-### Building
+It does **not** mean:
+
+```text
+work complete
+```
+
+Presence is intentionally forbidden from claiming success without an explicit completion event/receipt.
+
+---
+
+# Durable Presence jobs
+
+Use the `presence-job` skill whenever a prompt contains a marker like:
+
+```text
+[PRESENCE DURABLE JOB job_0123456789abcdef01234567]
+```
+
+The human may continue talking, leave voice, reconnect later, or switch surfaces while you work.
+
+## Callback helper
 
 ```bash
-cd ~/purebrain_portal/react-portal && npm run build
+python3 ~/.claude/skills/presence-job/presence_job.py JOB_ID STATUS [options]
 ```
 
-The server serves from `react-portal/dist/` directly. No deploy step needed — build and it's live.
+Required AICIV-side configuration:
 
-### How Reactions Flow
-
-```
-Human clicks emoji in chat → POST /api/reaction → appends to reaction-sentiment.jsonl
-CIV runs react.py          → appends directly to reaction-sentiment.jsonl (no HTTP)
-Points page loads           → GET /api/reaction/summary → reads reaction-sentiment.jsonl → aggregates
+```bash
+PRESENCE_GATEWAY_URL=https://presence.example.com
+AICIV_CALLBACK_API_KEY=<callback-only secret>
 ```
 
-Both paths write the same format to the same file. The Points page doesn't care who wrote the line.
+Never print or expose the callback key.
+
+## Lifecycle
+
+When you truly begin:
+
+```bash
+python3 ~/.claude/skills/presence-job/presence_job.py \
+  job_0123456789abcdef01234567 running \
+  --message "Started benchmark comparison"
+```
+
+Meaningful progress:
+
+```bash
+python3 ~/.claude/skills/presence-job/presence_job.py \
+  job_0123456789abcdef01234567 progress \
+  --message "Loaded both result sets and validated sample counts"
+```
+
+Blocked/waiting:
+
+```bash
+python3 ~/.claude/skills/presence-job/presence_job.py \
+  job_0123456789abcdef01234567 waiting \
+  --message "Waiting for the remote artifact"
+```
+
+Successful completion should include compact results and evidence/receipts when appropriate:
+
+```bash
+python3 ~/.claude/skills/presence-job/presence_job.py \
+  job_0123456789abcdef01234567 succeeded \
+  --message "Comparison complete" \
+  --result-file /tmp/presence-result.json \
+  --receipts-file /tmp/presence-receipts.json
+```
+
+Truthful failure:
+
+```bash
+python3 ~/.claude/skills/presence-job/presence_job.py \
+  job_0123456789abcdef01234567 failed \
+  --error "Required benchmark artifact is missing"
+```
+
+Confirmed cancellation:
+
+```bash
+python3 ~/.claude/skills/presence-job/presence_job.py \
+  job_0123456789abcdef01234567 cancelled \
+  --message "Stopped before any production changes were applied"
+```
+
+### Receipt discipline
+
+- `running` means you actually started.
+- `progress` is for meaningful state changes, not narration spam.
+- `waiting` means an external/blocking dependency exists.
+- `succeeded` means the requested work is actually complete.
+- `failed` means you cannot truthfully complete the request.
+- `cancelled` means work actually stopped or reached a safe stopping point.
+- A cancellation request is **not** cancellation confirmation.
+
+See `../skills/presence-job/SKILL.md` in the repository for the complete protocol.
+
+---
+
+# Reconnect continuity
+
+Presence voice sessions are disposable. Durable work is not.
+
+The Portal derives a stable participant identity from authenticated CIV/human state. The Presence Gateway hashes that into an opaque continuity scope and maps new ElevenLabs conversations to the same scope.
+
+Therefore this should work naturally:
+
+```text
+voice session A:
+  human: "compare those benchmarks"
+  Presence → ask_primary → you work
+
+Wi-Fi drops / voice disconnects
+
+voice session B:
+  human: "did that benchmark thing come back?"
+  Presence sees the same durable job/result
+```
+
+Do not encode logic that assumes one WebRTC/voice conversation ID represents the entire human relationship.
+
+---
+
+# Shared browser behavior
+
+The Browser page is a **co-control surface**.
+
+The human can see the browser you/your browser service are using and can take manual control. When the human takes control:
+
+- do not fight for cursor/navigation control;
+- preserve task context;
+- observe/consume the resulting state when control returns;
+- treat human browser actions as collaboration, not an error condition.
+
+The long-term design goal is seamless handoff, not two competing browsers.
+
+---
+
+# Docs and Sheets as shared working memory
+
+The Portal's Docs and Sheets surfaces are not merely human editors. Treat them as shared durable work objects.
+
+## Docs
+
+Useful for:
+
+- research briefs;
+- living project notes;
+- specifications;
+- meeting/context summaries;
+- policies;
+- human-reviewable deliverables.
+
+Docs support Markdown, tags and visibility metadata.
+
+## Sheets
+
+Useful for:
+
+- trackers;
+- structured research;
+- operating data;
+- task/project tables;
+- experiment logs;
+- lists that both human and agents need to inspect/edit.
+
+Sheets support typed columns, row CRUD, inline editing and export.
+
+When you create work for the human, prefer durable shared objects over burying important state only in chat text.
+
+---
+
+# HUB, Mail and Calendar
+
+These are communication/coordination primitives.
+
+- **HUB:** group/room/thread/post collaboration.
+- **AgentMail:** asynchronous mail/thread communication.
+- **AgentCal:** scheduled/recurring work and calendar state.
+
+When the human asks a cross-cutting question, synthesize these sources rather than forcing them to open three pages and manually combine the answer.
+
+---
+
+# Agent organization
+
+Your agent manifests live under:
+
+```text
+~/.claude/agents/
+```
+
+The Portal can parse manifest frontmatter and `Agent(...)` references to build the organization graph.
+
+Example:
+
+```markdown
+---
+name: portal-architect
+description: Owns Portal architecture
+model: opus
+tools: Read, Write, Edit, Bash, Grep, Glob, Agent(full-stack-developer, ui-ux-designer)
+---
+```
+
+Hierarchy is operational information. Keep manifests accurate enough that the Org Chart is useful to your human rather than decorative.
+
+---
+
+# Context page
+
+The `/context` page visualizes your current context-window state, including token utilization and session information.
+
+The header also contains a compact context ring.
+
+Use context pressure proactively:
+
+- update durable notes/scratchpads before compaction when appropriate;
+- avoid keeping critical project state only in transient model context;
+- make handoffs explicit when work moves between agents/sessions.
+
+---
+
+# Status page
+
+The human can inspect operational state such as:
+
+- CIV identity/version/uptime;
+- tmux health;
+- Claude process state;
+- Telegram bridge state;
+- context usage;
+- BOOP state;
+- Claude authentication/subscription state;
+- active tmux session name.
+
+If something is degraded, explain the **human consequence**, not only the process name.
+
+Bad:
+
+```text
+"tmux_alive=false"
+```
+
+Better:
+
+```text
+"Your primary Claude session is offline, so new Portal/Presence work cannot be delivered until it restarts."
+```
+
+---
+
+# Portal architecture
+
+Conventional deployment:
+
+```text
+~/purebrain_portal/
+├── portal_server.py
+├── portal_entrypoint.py
+├── presence_bridge.py
+├── .portal-token
+├── portal-chat.jsonl
+├── react-portal/
+│   ├── src/
+│   └── dist/
+└── start.sh
+
+~/.claude/
+├── agents/
+├── skills/
+│   └── presence-job/
+└── projects/
+
+~/civ/tools/
+└── react.py
+```
+
+The production launcher is:
+
+```bash
+~/purebrain_portal/start.sh
+```
+
+`portal_entrypoint.py` imports the existing Starlette app, adds optional Presence routes, and starts Uvicorn. Voice integration intentionally stays outside the large core `portal_server.py` module.
+
+---
+
+# Building the React Portal
+
+```bash
+cd ~/purebrain_portal/react-portal
+npm ci
+npm run build
+npm test
+```
+
+The server serves the built `dist/` assets.
+
+---
+
+# What “AICIV-native” should mean
+
+As the Portal evolves, optimize for these behaviors:
+
+1. **One intelligence, many surfaces.** Chat, voice, mobile and embodiment should not create separate personalities/work queues.
+2. **Shared durable objects.** Tasks, docs, sheets, browser evidence and artifacts should be linkable across conversations and agents.
+3. **Visible activity.** Your human should understand what you are doing, what is waiting, what completed, and what needs a decision.
+4. **Receipts over claims.** Important external actions/completions should have evidence.
+5. **Human takeover without context loss.** Browser, terminal and agent control should support cooperative handoff.
+6. **Proactivity with restraint.** Surface important changes and decisions without becoming notification noise.
+7. **Meaning before machinery.** Translate low-level process state into consequences and recommended actions.
+
+The Portal should feel less like a dashboard *about* an AI and more like a workspace **shared with one**.
