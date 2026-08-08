@@ -1,0 +1,44 @@
+.global-presence {
+  display: flex;
+  align-items: center;
+}
+
+.global-presence-loading {
+  padding: 7px 11px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-full);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: wait;
+}
+
+.global-presence .voice-presence {
+  position: relative;
+}
+
+.global-presence .voice-presence-error {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  width: max-content;
+  max-width: min(320px, 80vw);
+  padding: 7px 10px;
+  border: 1px solid var(--status-error);
+  border-radius: var(--radius-md);
+  background: var(--surface-modal);
+  box-shadow: var(--shadow-md);
+}
+
+@media (max-width: 720px) {
+  .global-presence .voice-presence-label {
+    display: none;
+  }
+
+  .global-presence .voice-presence-main {
+    min-width: 38px;
+    padding-inline: 8px;
+  }
+}
