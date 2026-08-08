@@ -115,18 +115,25 @@
   cursor: not-allowed;
 }
 
-/* Mic button */
+/* Speech-to-text dictation. Full realtime Presence lives in the app header. */
 .chat-mic-btn {
-  width: 32px;
+  min-width: 32px;
   height: 32px;
+  padding: 0 7px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  gap: 4px;
+  font-size: 14px;
   color: var(--text-tertiary);
   border-radius: var(--radius-sm);
   flex-shrink: 0;
   transition: all var(--transition-fast);
+}
+
+.chat-mic-label {
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .chat-mic-btn:hover {
@@ -144,7 +151,6 @@
   50% { opacity: 0.5; }
 }
 
-/* Slash command dropdown */
 .slash-dropdown {
   position: absolute;
   bottom: 100%;
@@ -204,5 +210,14 @@
 @media (max-width: 768px) {
   .chat-input-container {
     padding: 8px 8px 12px;
+  }
+
+  .chat-mic-label {
+    display: none;
+  }
+
+  .chat-mic-btn {
+    width: 32px;
+    padding: 0;
   }
 }
