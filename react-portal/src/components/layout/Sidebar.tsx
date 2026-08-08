@@ -16,6 +16,7 @@ const NAV_GROUPS = [
   {
     label: 'Work',
     items: [
+      { to: '/projects', icon: '\u{1F5C2}\u{FE0F}', label: 'Projects' },
       { to: '/teams', icon: '\u{1F465}', label: 'Teams' },
       { to: '/calendar', icon: '\u{1F4C5}', label: 'Calendar' },
       { to: '/mail', icon: '\u{1F4E8}', label: 'Mail' },
