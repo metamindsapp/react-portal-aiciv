@@ -13,45 +13,36 @@ export function TerminalView() {
     let unmounted = false
 
     function connect() {
-      const token = localStorage.getItem(AUTH_TOKEN_KEY)
-      if (!token) return
-
+      const legacy = localStorage.getItem(AUTH_TOKEN_KEY)
       const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-      const url = `${proto}//${window.location.host}/ws/terminal?token=${token}`
+      const suffix = legacy ? `?token=${encodeURIComponent(legacy)}` : ''
+      const url = `${proto}//${window.location.host}/ws/terminal${suffix}`
 
       try {
         const ws = new WebSocket(url)
         wsRef.current = ws
-
         ws.onopen = () => {
           if (!unmounted) setConnected(true)
         }
-
         ws.onmessage = (event) => {
-          if (!unmounted) {
-            setContent(event.data)
+          if (!unmounted) setContent(event.data)
+        }
+        ws.onclose = (event) => {
+          if (unmounted) return
+          setConnected(false)
+          if (event.code === 4401) {
+            window.dispatchEvent(new CustomEvent('aiciv:auth-expired', { detail: { status: 401, path: '/ws/terminal' } }))
+            return
           }
-        }
-
-        ws.onclose = () => {
-          if (!unmounted) {
-            setConnected(false)
-            reconnectRef.current = setTimeout(connect, 2000)
-          }
-        }
-
-        ws.onerror = () => {
-          ws.close()
-        }
-      } catch {
-        if (!unmounted) {
           reconnectRef.current = setTimeout(connect, 2000)
         }
+        ws.onerror = () => ws.close()
+      } catch {
+        if (!unmounted) reconnectRef.current = setTimeout(connect, 2000)
       }
     }
 
     connect()
-
     return () => {
       unmounted = true
       if (reconnectRef.current) clearTimeout(reconnectRef.current)
@@ -60,9 +51,7 @@ export function TerminalView() {
   }, [])
 
   useEffect(() => {
-    if (preRef.current) {
-      preRef.current.scrollTop = preRef.current.scrollHeight
-    }
+    if (preRef.current) preRef.current.scrollTop = preRef.current.scrollHeight
   }, [content])
 
   return (
@@ -73,9 +62,7 @@ export function TerminalView() {
           {connected ? '\u{1F7E2} connected' : '\u{1F534} disconnected'}
         </span>
       </div>
-      <pre ref={preRef} className="terminal-output">
-        {content || 'Connecting to terminal...'}
-      </pre>
+      <pre ref={preRef} className="terminal-output">{content || 'Connecting to terminal...'}</pre>
     </div>
   )
 }
