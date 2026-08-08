@@ -23,9 +23,13 @@ returned to browser code.
 
 from __future__ import annotations
 
+import math
 import os
+import threading
+import time
+from collections import deque
 from pathlib import Path
-from typing import Awaitable, Callable
+from typing import Callable
 
 import httpx
 from starlette.applications import Starlette
@@ -36,19 +40,62 @@ from starlette.routing import Route
 
 AuthChecker = Callable[[Request], bool]
 HttpClientFactory = Callable[[], httpx.AsyncClient]
+Clock = Callable[[], float]
 
 
 class PresenceBridgeConfig:
     """Server-side Presence configuration loaded from environment / ~/.env."""
 
-    def __init__(self, gateway_url: str, gateway_api_key: str, timeout_seconds: float = 8.0):
+    def __init__(
+        self,
+        gateway_url: str,
+        gateway_api_key: str,
+        timeout_seconds: float = 8.0,
+        token_limit: int = 12,
+        token_window_seconds: float = 60.0,
+    ):
         self.gateway_url = gateway_url.rstrip("/")
         self.gateway_api_key = gateway_api_key
         self.timeout_seconds = timeout_seconds
+        self.token_limit = max(1, min(int(token_limit), 1_000))
+        self.token_window_seconds = max(1.0, min(float(token_window_seconds), 3_600.0))
 
     @property
     def configured(self) -> bool:
         return bool(self.gateway_url and self.gateway_api_key)
+
+
+class SlidingWindowLimiter:
+    """Small process-local limiter for expensive credential mint operations.
+
+    Portal currently has one bearer-authenticated human surface per CIV, so a
+    per-process bucket is the correct first boundary: it catches accidental
+    reconnect storms and malicious browser loops without trusting spoofable
+    forwarded-IP headers. Fleet/tenant-wide quotas belong at the Presence
+    Gateway once multi-tenant auth lands there.
+    """
+
+    def __init__(self, limit: int, window_seconds: float, clock: Clock = time.monotonic):
+        self.limit = max(1, int(limit))
+        self.window_seconds = max(1.0, float(window_seconds))
+        self._clock = clock
+        self._events: deque[float] = deque()
+        self._lock = threading.Lock()
+
+    def consume(self) -> tuple[bool, int]:
+        """Return (allowed, retry_after_seconds)."""
+        now = self._clock()
+        cutoff = now - self.window_seconds
+        with self._lock:
+            while self._events and self._events[0] <= cutoff:
+                self._events.popleft()
+
+            if len(self._events) >= self.limit:
+                retry_after = max(1, math.ceil(self.window_seconds - (now - self._events[0])))
+                return False, retry_after
+
+            self._events.append(now)
+            return True, 0
 
 
 def _read_dotenv(path: Path | None = None) -> dict[str, str]:
@@ -90,10 +137,24 @@ def load_presence_bridge_config() -> PresenceBridgeConfig:
         timeout_seconds = 8.0
     timeout_seconds = max(1.0, min(timeout_seconds, 30.0))
 
+    token_limit_raw = value("PRESENCE_VOICE_TOKEN_LIMIT")
+    try:
+        token_limit = int(token_limit_raw) if token_limit_raw else 12
+    except ValueError:
+        token_limit = 12
+
+    token_window_raw = value("PRESENCE_VOICE_TOKEN_WINDOW_SECONDS")
+    try:
+        token_window_seconds = float(token_window_raw) if token_window_raw else 60.0
+    except ValueError:
+        token_window_seconds = 60.0
+
     return PresenceBridgeConfig(
         gateway_url=value("PRESENCE_GATEWAY_URL"),
         gateway_api_key=value("PRESENCE_GATEWAY_API_KEY"),
         timeout_seconds=timeout_seconds,
+        token_limit=token_limit,
+        token_window_seconds=token_window_seconds,
     )
 
 
@@ -108,15 +169,20 @@ def build_presence_routes(
     human_name: str,
     config: PresenceBridgeConfig | None = None,
     http_client_factory: HttpClientFactory | None = None,
+    token_limiter: SlidingWindowLimiter | None = None,
 ) -> list[Route]:
     """Build isolated Presence routes for registration on an existing Portal app.
 
-    Dependency injection for config/client makes this boundary deterministic in
-    tests and prevents CI from making network calls.
+    Dependency injection for config/client/limiter makes this boundary
+    deterministic in tests and prevents CI from making network calls.
     """
 
     bridge_config = config or load_presence_bridge_config()
     client_factory = http_client_factory or _default_http_client_factory(bridge_config.timeout_seconds)
+    limiter = token_limiter or SlidingWindowLimiter(
+        bridge_config.token_limit,
+        bridge_config.token_window_seconds,
+    )
 
     async def presence_status(request: Request) -> JSONResponse:
         if not check_auth(request):
@@ -134,22 +200,24 @@ def build_presence_routes(
         )
 
     async def presence_voice_token(request: Request) -> JSONResponse:
+        # Authentication happens before rate accounting: random unauthenticated
+        # Internet traffic must not be able to exhaust a legitimate CIV's bucket.
         if not check_auth(request):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
         if not bridge_config.configured:
             return JSONResponse({"error": "presence_not_configured"}, status_code=503)
 
-        participant_name = f"{civ_name}:{human_name}:portal"
-        try:
-            body = await request.json()
-            if isinstance(body, dict):
-                supplied = body.get("participantName")
-                if isinstance(supplied, str) and supplied.strip():
-                    # Participant labels are metadata, not identity authority.
-                    participant_name = supplied.strip()[:160]
-        except Exception:
-            # Empty request bodies are fine; use the stable Portal-derived name.
-            pass
+        allowed, retry_after = limiter.consume()
+        if not allowed:
+            return JSONResponse(
+                {"error": "voice_token_rate_limited"},
+                status_code=429,
+                headers={"Retry-After": str(retry_after)},
+            )
+
+        # Identity metadata is derived only from authenticated Portal state.
+        # Browser-supplied participant labels are intentionally ignored.
+        participant_name = f"{civ_name}:{human_name}:portal"[:160]
 
         try:
             async with client_factory() as client:
@@ -205,6 +273,7 @@ def register_presence_routes(
     human_name: str,
     config: PresenceBridgeConfig | None = None,
     http_client_factory: HttpClientFactory | None = None,
+    token_limiter: SlidingWindowLimiter | None = None,
 ) -> None:
     """Append Presence routes once to an existing Starlette Portal application."""
     existing_paths = {
@@ -219,6 +288,7 @@ def register_presence_routes(
         human_name=human_name,
         config=config,
         http_client_factory=http_client_factory,
+        token_limiter=token_limiter,
     ):
         if route.path not in existing_paths:
             app.router.routes.append(route)
