@@ -1,0 +1,57 @@
+name: Portal Voice Presence CI
+
+on:
+  pull_request:
+    paths:
+      - "presence_bridge.py"
+      - "portal_entrypoint.py"
+      - "start.sh"
+      - "test_presence_bridge.py"
+      - "react-portal/**"
+      - ".github/workflows/portal-voice-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "presence_bridge.py"
+      - "portal_entrypoint.py"
+      - "start.sh"
+      - "test_presence_bridge.py"
+      - "react-portal/**"
+      - ".github/workflows/portal-voice-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install focused Portal test dependencies
+        run: pip install starlette httpx
+      - name: Compile Presence bridge and wrapper
+        run: python -m py_compile presence_bridge.py portal_entrypoint.py
+      - name: Run Presence bridge tests
+        run: python test_presence_bridge.py
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: react-portal
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # npm install is intentional for this first SDK integration: package.json
+      # adds @elevenlabs/react and the existing lockfile predates that dependency.
+      # Once the lock is refreshed in a normal checkout, we can tighten to npm ci.
+      - run: npm install
+      - run: npm run build
+      - run: npm test
