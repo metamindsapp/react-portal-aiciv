@@ -57,9 +57,10 @@ export function BrowserView() {
 
   useEffect(() => {
     disposedRef.current = false
-    const token = localStorage.getItem(AUTH_TOKEN_KEY) ?? ''
+    const legacy = localStorage.getItem(AUTH_TOKEN_KEY)
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${protocol}//${window.location.host}/ws/browser?token=${token}`
+    const suffix = legacy ? `?token=${encodeURIComponent(legacy)}` : ''
+    const wsUrl = `${protocol}//${window.location.host}/ws/browser${suffix}`
 
     const scheduleReconnect = () => {
       if (disposedRef.current || reconnectRef.current) return
@@ -81,10 +82,14 @@ export function BrowserView() {
         setStatus('live')
       }
 
-      ws.onclose = () => {
+      ws.onclose = (event) => {
         if (disposedRef.current) return
         setConnected(false)
         setStatus('error')
+        if (event.code === 4401) {
+          window.dispatchEvent(new CustomEvent('aiciv:auth-expired', { detail: { status: 401, path: '/ws/browser' } }))
+          return
+        }
         scheduleReconnect()
       }
 
@@ -119,9 +124,7 @@ export function BrowserView() {
   }, [drawFrame, setPageUrl])
 
   const sendWs = useCallback((cmd: object) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify(cmd))
-    }
+    if (wsRef.current?.readyState === WebSocket.OPEN) wsRef.current.send(JSON.stringify(cmd))
   }, [])
 
   const navigate = useCallback(() => {
@@ -182,9 +185,7 @@ export function BrowserView() {
   const askAicivAboutPage = useCallback(async () => {
     setSurfaceMessage(null)
     try {
-      const evidenceLine = lastEvidence
-        ? `\nShared evidence: ${lastEvidence.id} (${lastEvidence.artifactUrl})`
-        : ''
+      const evidenceLine = lastEvidence ? `\nShared evidence: ${lastEvidence.id} (${lastEvidence.artifactUrl})` : ''
       await sendChatMessage(
         `[BROWSER CONTEXT]\nPage: ${title || '(untitled)'}\nURL: ${currentUrlRef.current}${evidenceLine}\n\nPlease inspect this shared browser context and tell me what is important, what you notice, and what you recommend next.`,
       )
@@ -201,37 +202,16 @@ export function BrowserView() {
     <div className="browser-view">
       <div className="browser-toolbar">
         <div className="browser-status-dot" style={{ background: statusColor }} title={statusLabel} />
-
         <form className="browser-url-form" onSubmit={e => { e.preventDefault(); navigate() }}>
-          <input
-            className="browser-url-input"
-            type="text"
-            value={urlInput}
-            onChange={e => setUrlInput(e.target.value)}
-            placeholder="https://…"
-            spellCheck={false}
-          />
+          <input className="browser-url-input" type="text" value={urlInput} onChange={e => setUrlInput(e.target.value)} placeholder="https://…" spellCheck={false} />
           <button className="browser-go-btn" type="submit">Go</button>
         </form>
-
         <div className="browser-current-url" title={currentUrl}>{title || currentUrl}</div>
-
-        <button
-          className="browser-evidence-btn"
-          onClick={() => void captureEvidence()}
-          disabled={!connected || capturing}
-          title="Save the current shared viewport as evidence"
-        >
+        <button className="browser-evidence-btn" onClick={() => void captureEvidence()} disabled={!connected || capturing} title="Save the current shared viewport as evidence">
           {capturing ? 'Saving…' : '📸 Evidence'}
         </button>
-        <button className="browser-ask-btn" onClick={() => void askAicivAboutPage()} disabled={!connected}>
-          Ask AICIV
-        </button>
-        <button
-          className={`browser-control-btn ${humanControl ? 'active' : ''}`}
-          onClick={handoff}
-          title={humanControl ? 'Hand browser control back to the AICIV' : 'Take direct browser control'}
-        >
+        <button className="browser-ask-btn" onClick={() => void askAicivAboutPage()} disabled={!connected}>Ask AICIV</button>
+        <button className={`browser-control-btn ${humanControl ? 'active' : ''}`} onClick={handoff} title={humanControl ? 'Hand browser control back to the AICIV' : 'Take direct browser control'}>
           {humanControl ? '↪ Hand back' : '🕹 Take control'}
         </button>
       </div>
@@ -240,49 +220,26 @@ export function BrowserView() {
 
       <div className="browser-body">
         <div className="browser-canvas-wrap">
-          {!connected && (
-            <div className="browser-overlay">
-              <div className="browser-overlay-msg">
-                {status === 'connecting' ? 'Connecting to browser…' : 'Browser offline — reconnecting…'}
-              </div>
-            </div>
-          )}
-          <canvas
-            ref={canvasRef}
-            className={`browser-canvas ${humanControl ? 'human-mode' : ''}`}
-            width={BROWSER_W}
-            height={BROWSER_H}
-            onClick={handleCanvasClick}
-            onWheel={handleWheel}
-          />
-          <div className={`browser-control-owner browser-control-owner-${controlOwner}`}>
-            {humanControl ? 'Human has control' : 'AICIV has control'}
-          </div>
+          {!connected && <div className="browser-overlay"><div className="browser-overlay-msg">{status === 'connecting' ? 'Connecting to browser…' : 'Browser offline — reconnecting…'}</div></div>}
+          <canvas ref={canvasRef} className={`browser-canvas ${humanControl ? 'human-mode' : ''}`} width={BROWSER_W} height={BROWSER_H} onClick={handleCanvasClick} onWheel={handleWheel} />
+          <div className={`browser-control-owner browser-control-owner-${controlOwner}`}>{humanControl ? 'Human has control' : 'AICIV has control'}</div>
         </div>
 
         <div className="browser-log">
           <div className="browser-log-header">Shared action & evidence log</div>
-          {log.length === 0 ? (
-            <div className="browser-log-empty">No actions yet</div>
-          ) : (
-            log.map((entry, i) => (
-              <div key={i} className="browser-log-entry">
-                <span className="browser-log-action">{entry.action}</span>
-                {entry.url != null && <span className="browser-log-detail">{String(entry.url).slice(0, 48)}</span>}
-                {entry.evidence_id != null && <span className="browser-log-detail">{String(entry.evidence_id)}</span>}
-                {entry.x != null && <span className="browser-log-detail">({Math.round(entry.x as number)}, {Math.round(entry.y as number)})</span>}
-                {entry.text != null && <span className="browser-log-detail">“{String(entry.text).slice(0, 24)}”</span>}
-              </div>
-            ))
-          )}
+          {log.length === 0 ? <div className="browser-log-empty">No actions yet</div> : log.map((entry, i) => (
+            <div key={i} className="browser-log-entry">
+              <span className="browser-log-action">{entry.action}</span>
+              {entry.url != null && <span className="browser-log-detail">{String(entry.url).slice(0, 48)}</span>}
+              {entry.evidence_id != null && <span className="browser-log-detail">{String(entry.evidence_id)}</span>}
+              {entry.x != null && <span className="browser-log-detail">({Math.round(entry.x as number)}, {Math.round(entry.y as number)})</span>}
+              {entry.text != null && <span className="browser-log-detail">“{String(entry.text).slice(0, 24)}”</span>}
+            </div>
+          ))}
         </div>
       </div>
 
-      {humanControl && (
-        <div className="browser-control-hint">
-          🕹 You have direct control. Click/scroll events go to the shared browser; use <strong>Hand back</strong> when the AICIV should continue.
-        </div>
-      )}
+      {humanControl && <div className="browser-control-hint">🕹 You have direct control. Click/scroll events go to the shared browser; use <strong>Hand back</strong> when the AICIV should continue.</div>}
     </div>
   )
 }
