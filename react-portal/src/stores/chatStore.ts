@@ -11,6 +11,8 @@ interface ChatState {
   sending: boolean
   wsConnected: boolean
   error: string | null
+  focusMessageId: string | null
+  setFocusMessageId: (messageId: string | null) => void
   loadHistory: () => Promise<void>
   send: (text: string) => Promise<void>
   react: (msgId: string, emoji: string, msgText: string, msgRole: 'user' | 'assistant') => Promise<void>
@@ -24,6 +26,9 @@ export const useChatStore = create<ChatState>((set) => ({
   sending: false,
   wsConnected: false,
   error: null,
+  focusMessageId: null,
+
+  setFocusMessageId: (messageId) => set({ focusMessageId: messageId }),
 
   loadHistory: async () => {
     set({ loading: true, error: null })
@@ -78,7 +83,6 @@ export const useChatStore = create<ChatState>((set) => ({
 
     wsCleanup = chatWs.onMessage((msg) => {
       set((s) => {
-        // Check if message already exists by ID
         const idx = s.messages.findIndex(m => m.id === msg.id)
         if (idx >= 0) {
           const updated = [...s.messages]
@@ -86,8 +90,6 @@ export const useChatStore = create<ChatState>((set) => ({
           return { messages: updated }
         }
 
-        // Check if this is a server echo of an optimistic local message:
-        // same role + same text content → replace the local one
         if (msg.role === 'user') {
           const localIdx = s.messages.findIndex(
             m => m.id.startsWith('local-') && m.role === 'user' && m.text === msg.text
