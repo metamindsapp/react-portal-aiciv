@@ -26,13 +26,26 @@ class FakeAsyncClient:
     async def __aexit__(self, exc_type, exc, tb):
         return False
 
-    async def post(self, url: str, *, headers: dict[str, str], json: dict[str, Any]):
-        self.requests.append({"url": url, "headers": headers, "json": json})
+    def _respond(self):
         if self.error:
             raise self.error
         if self.response is None:
             raise RuntimeError("fake client has no response")
         return self.response
+
+    async def post(self, url: str, *, headers: dict[str, str], json: dict[str, Any]):
+        self.requests.append({"method": "POST", "url": url, "headers": headers, "json": json})
+        return self._respond()
+
+    async def get(
+        self,
+        url: str,
+        *,
+        headers: dict[str, str],
+        params: dict[str, str] | None = None,
+    ):
+        self.requests.append({"method": "GET", "url": url, "headers": headers, "params": params or {}})
+        return self._respond()
 
 
 class FakeClock:
@@ -87,18 +100,20 @@ class PresenceBridgeTests(unittest.TestCase):
         )
         return TestClient(app), fake_http
 
+    @staticmethod
+    def auth_headers() -> dict[str, str]:
+        return {"Authorization": "Bearer portal-user-token"}
+
     def test_status_requires_portal_auth_and_never_returns_gateway_secret(self):
         client, _ = self.build_client()
         self.assertEqual(client.get("/api/presence/status").status_code, 401)
 
-        response = client.get(
-            "/api/presence/status",
-            headers={"Authorization": "Bearer portal-user-token"},
-        )
+        response = client.get("/api/presence/status", headers=self.auth_headers())
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["configured"], True)
         self.assertEqual(payload["civ"], "synth")
+        self.assertEqual(payload["jobs"]["available"], True)
         encoded = json.dumps(payload)
         self.assertNotIn("gateway-super-secret", encoded)
         self.assertNotIn("presence.internal.example", encoded)
@@ -110,11 +125,7 @@ class PresenceBridgeTests(unittest.TestCase):
         )
         client, fake_http = self.build_client(upstream_response=upstream)
 
-        response = client.post(
-            "/api/presence/voice/token",
-            headers={"Authorization": "Bearer portal-user-token"},
-            json={},
-        )
+        response = client.post("/api/presence/voice/token", headers=self.auth_headers(), json={})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.json(),
@@ -141,7 +152,7 @@ class PresenceBridgeTests(unittest.TestCase):
 
         response = client.post(
             "/api/presence/voice/token",
-            headers={"Authorization": "Bearer portal-user-token"},
+            headers=self.auth_headers(),
             json={"participantName": "I-am-definitely-someone-else"},
         )
         self.assertEqual(response.status_code, 200)
@@ -149,11 +160,7 @@ class PresenceBridgeTests(unittest.TestCase):
 
     def test_unconfigured_bridge_fails_closed_without_network_call(self):
         client, fake_http = self.build_client(configured=False)
-        response = client.post(
-            "/api/presence/voice/token",
-            headers={"Authorization": "Bearer portal-user-token"},
-            json={},
-        )
+        response = client.post("/api/presence/voice/token", headers=self.auth_headers(), json={})
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json(), {"error": "presence_not_configured"})
         self.assertEqual(fake_http.requests, [])
@@ -164,11 +171,7 @@ class PresenceBridgeTests(unittest.TestCase):
             json={"secret_diagnostic": "provider internals should not leak"},
         )
         client, _ = self.build_client(upstream_response=upstream)
-        response = client.post(
-            "/api/presence/voice/token",
-            headers={"Authorization": "Bearer portal-user-token"},
-            json={},
-        )
+        response = client.post("/api/presence/voice/token", headers=self.auth_headers(), json={})
         self.assertEqual(response.status_code, 502)
         self.assertEqual(response.json(), {"error": "voice_token_unavailable"})
         self.assertNotIn("secret_diagnostic", response.text)
@@ -176,11 +179,7 @@ class PresenceBridgeTests(unittest.TestCase):
     def test_invalid_upstream_token_shape_is_rejected(self):
         upstream = httpx.Response(200, json={"token": "", "conversationId": None})
         client, _ = self.build_client(upstream_response=upstream)
-        response = client.post(
-            "/api/presence/voice/token",
-            headers={"Authorization": "Bearer portal-user-token"},
-            json={},
-        )
+        response = client.post("/api/presence/voice/token", headers=self.auth_headers(), json={})
         self.assertEqual(response.status_code, 502)
         self.assertEqual(response.json(), {"error": "invalid_voice_token_response"})
 
@@ -189,7 +188,7 @@ class PresenceBridgeTests(unittest.TestCase):
         clock = FakeClock()
         limiter = SlidingWindowLimiter(limit=2, window_seconds=60, clock=clock)
         client, fake_http = self.build_client(upstream_response=upstream, token_limiter=limiter)
-        headers = {"Authorization": "Bearer portal-user-token"}
+        headers = self.auth_headers()
 
         self.assertEqual(client.post("/api/presence/voice/token", headers=headers).status_code, 200)
         self.assertEqual(client.post("/api/presence/voice/token", headers=headers).status_code, 200)
@@ -212,12 +211,58 @@ class PresenceBridgeTests(unittest.TestCase):
         for _ in range(5):
             self.assertEqual(client.post("/api/presence/voice/token").status_code, 401)
 
-        allowed = client.post(
-            "/api/presence/voice/token",
-            headers={"Authorization": "Bearer portal-user-token"},
-        )
+        allowed = client.post("/api/presence/voice/token", headers=self.auth_headers())
         self.assertEqual(allowed.status_code, 200)
         self.assertEqual(len(fake_http.requests), 1)
+
+    def test_recent_jobs_are_exposed_without_gateway_credentials(self):
+        job = {
+            "jobId": "job_0123456789abcdef01234567",
+            "goal": "Compare provider latency",
+            "status": "running",
+            "receipts": [],
+            "events": [],
+            "createdAt": "2026-08-08T12:00:00.000Z",
+            "updatedAt": "2026-08-08T12:01:00.000Z",
+        }
+        upstream = httpx.Response(200, json={"jobs": [job], "count": 1})
+        client, fake_http = self.build_client(upstream_response=upstream)
+
+        response = client.get("/api/presence/jobs?limit=12&status=running", headers=self.auth_headers())
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["jobs"][0]["jobId"], job["jobId"])
+        self.assertEqual(fake_http.requests[0]["method"], "GET")
+        self.assertEqual(fake_http.requests[0]["url"], "https://presence.internal.example/v1/delegations")
+        self.assertEqual(fake_http.requests[0]["params"], {"limit": "12", "status": "running"})
+        self.assertNotIn("gateway-super-secret", response.text)
+
+    def test_job_cancel_returns_cancel_requested_state_not_fake_completion(self):
+        job_id = "job_0123456789abcdef01234567"
+        upstream = httpx.Response(
+            202,
+            json={
+                "job": {
+                    "jobId": job_id,
+                    "goal": "Long research",
+                    "status": "cancel_requested",
+                    "receipts": [],
+                    "events": [],
+                }
+            },
+        )
+        client, fake_http = self.build_client(upstream_response=upstream)
+
+        response = client.post(f"/api/presence/jobs/{job_id}/cancel", headers=self.auth_headers())
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.json()["job"]["status"], "cancel_requested")
+        self.assertEqual(fake_http.requests[0]["method"], "POST")
+        self.assertTrue(fake_http.requests[0]["url"].endswith(f"/v1/delegations/{job_id}/cancel"))
+
+    def test_invalid_job_ids_never_reach_gateway(self):
+        client, fake_http = self.build_client(upstream_response=httpx.Response(200, json={}))
+        response = client.get("/api/presence/jobs/not-a-job", headers=self.auth_headers())
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(fake_http.requests, [])
 
 
 if __name__ == "__main__":

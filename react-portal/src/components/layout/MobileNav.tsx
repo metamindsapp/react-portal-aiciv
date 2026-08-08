@@ -5,23 +5,25 @@ import { cn } from '../../utils/cn'
 import './MobileNav.css'
 
 const PRIMARY_ITEMS = [
+  { to: '/now', icon: '\u{2728}', label: 'Now' },
   { to: '/', icon: '\u{1F4AC}', label: 'Chat' },
   { to: '/calendar', icon: '\u{1F4C5}', label: 'Cal' },
   { to: '/mail', icon: '\u{1F4E8}', label: 'Mail' },
-  { to: '/terminal', icon: '\u{2328}\u{FE0F}', label: 'Term' },
 ] as const
 
 const MORE_ITEMS = [
-  { to: '/hub', icon: '\u{1F310}', label: 'HUB' },
-  { to: '/tgim', icon: '\u{1F3AF}', label: 'TGIM' },
-  { to: '/orgchart', icon: '\u{1F3E2}', label: 'Org Chart' },
   { to: '/teams', icon: '\u{1F465}', label: 'Teams' },
-  { to: '/context', icon: '\u{1F9E0}', label: 'Context' },
-  { to: '/points', icon: '\u{2B50}', label: 'Points' },
   { to: '/docs', icon: '\u{1F4D6}', label: 'Docs' },
   { to: '/sheets', icon: '\u{1F4CA}', label: 'Sheets' },
+  { to: '/hub', icon: '\u{1F310}', label: 'HUB' },
+  { to: '/browser', icon: '\u{1F30D}', label: 'Browser' },
+  { to: '/tgim', icon: '\u{1F3AF}', label: 'TGIM' },
+  { to: '/orgchart', icon: '\u{1F3E2}', label: 'Org' },
+  { to: '/terminal', icon: '\u{2328}\u{FE0F}', label: 'Terminal' },
+  { to: '/context', icon: '\u{1F9E0}', label: 'Context' },
+  { to: '/points', icon: '\u{2B50}', label: 'Signals' },
   { to: '/bookmarks', icon: '\u{1F4CC}', label: 'Bookmarks' },
-  { to: '/status', icon: '\u{1F4CA}', label: 'Status' },
+  { to: '/status', icon: '\u{1F4DF}', label: 'Status' },
   { to: '/settings', icon: '\u{2699}\u{FE0F}', label: 'Settings' },
 ] as const
 
@@ -37,12 +39,10 @@ export function MobileNav() {
 
   return (
     <>
-      {/* Overlay */}
       {moreOpen && (
         <div className="mobile-more-overlay" onClick={() => setMoreOpen(false)} />
       )}
 
-      {/* Slide-up sheet */}
       {moreOpen && (
         <div className="mobile-more-sheet">
           <div className="mobile-more-handle" />
@@ -62,8 +62,7 @@ export function MobileNav() {
         </div>
       )}
 
-      {/* Bottom nav bar */}
-      <nav className="mobile-nav">
+      <nav className="mobile-nav" aria-label="Mobile Portal navigation">
         {PRIMARY_ITEMS.map(item => (
           <NavLink
             key={item.to}

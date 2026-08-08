@@ -4,6 +4,7 @@ import { AuthGuard } from './components/auth/AuthGuard'
 import { ClaudeAuthFlow } from './components/auth/ClaudeAuthFlow'
 import { AppShell } from './components/layout/AppShell'
 import { ChatView } from './components/chat/ChatView'
+import { NowView } from './components/now/NowView'
 import { CalendarView } from './components/calendar/CalendarView'
 import { MailView } from './components/agentmail/MailView'
 import { SettingsView } from './components/settings/SettingsView'
@@ -39,24 +40,25 @@ function AuthenticatedApp() {
       <ClaudeAuthFlow />
       <Routes>
         <Route element={<AppShell />}>
-        <Route path="/" element={<ChatView />} />
-        <Route path="/terminal" element={<TerminalView />} />
-        <Route path="/teams" element={<TeamsView />} />
-        <Route path="/orgchart" element={<OrgChartView />} />
-        <Route path="/calendar" element={<CalendarView />} />
-        <Route path="/mail" element={<MailView />} />
-        <Route path="/bookmarks" element={<BookmarksView />} />
-        <Route path="/context" element={<ContextView />} />
-        <Route path="/points" element={<PointsView />} />
-        <Route path="/docs" element={<DocsView />} />
-        <Route path="/sheets" element={<SheetsView />} />
-        <Route path="/hub" element={<HubView />} />
-        <Route path="/browser" element={<BrowserView />} />
-        <Route path="/tgim" element={<TgimView />} />
-        <Route path="/status" element={<StatusView />} />
-        <Route path="/settings" element={<SettingsView />} />
-      </Route>
-    </Routes>
+          <Route path="/" element={<ChatView />} />
+          <Route path="/now" element={<NowView />} />
+          <Route path="/terminal" element={<TerminalView />} />
+          <Route path="/teams" element={<TeamsView />} />
+          <Route path="/orgchart" element={<OrgChartView />} />
+          <Route path="/calendar" element={<CalendarView />} />
+          <Route path="/mail" element={<MailView />} />
+          <Route path="/bookmarks" element={<BookmarksView />} />
+          <Route path="/context" element={<ContextView />} />
+          <Route path="/points" element={<PointsView />} />
+          <Route path="/docs" element={<DocsView />} />
+          <Route path="/sheets" element={<SheetsView />} />
+          <Route path="/hub" element={<HubView />} />
+          <Route path="/browser" element={<BrowserView />} />
+          <Route path="/tgim" element={<TgimView />} />
+          <Route path="/status" element={<StatusView />} />
+          <Route path="/settings" element={<SettingsView />} />
+        </Route>
+      </Routes>
     </>
   )
 }
