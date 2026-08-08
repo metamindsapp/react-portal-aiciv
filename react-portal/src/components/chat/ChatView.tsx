@@ -1,14 +1,21 @@
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useChatStore } from '../../stores/chatStore'
 import { uploadFile } from '../../api/client'
 import { MessageList } from './MessageList'
 import { ChatInput } from './ChatInput'
 import { SearchPanel } from './SearchPanel'
 import { ArtifactPanel } from './ArtifactPanel'
-import { VoicePresenceControl } from './VoicePresenceControl'
 import { LoadingSpinner } from '../common/LoadingSpinner'
 import { EmptyState } from '../common/EmptyState'
 import './ChatView.css'
+
+// ElevenLabs/WebRTC code is large and only needed when Chat renders the voice
+// control. Keep it out of the Portal's initial application chunk; Vite turns
+// this dynamic import into a separate on-demand bundle.
+const VoicePresenceControl = lazy(async () => {
+  const module = await import('./VoicePresenceControl')
+  return { default: module.VoicePresenceControl }
+})
 
 export function ChatView() {
   const messages = useChatStore(s => s.messages)
@@ -69,7 +76,15 @@ export function ChatView() {
       <div className="chat-main-area">
         <div className="chat-header-bar">
           <div className="chat-header-actions">
-            <VoicePresenceControl />
+            <Suspense
+              fallback={(
+                <button type="button" className="chat-voice-loading" disabled aria-label="Loading voice controls">
+                  Voice
+                </button>
+              )}
+            >
+              <VoicePresenceControl />
+            </Suspense>
             <button
               className={`chat-search-toggle ${showSearch ? 'chat-search-toggle-active' : ''}`}
               onClick={() => {
