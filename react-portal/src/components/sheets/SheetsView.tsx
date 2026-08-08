@@ -1,14 +1,15 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { useSheetsStore } from '../../stores/sheetsStore'
+import { sendChatMessage } from '../../api/chat'
 import { exportSheet } from '../../api/sheets'
+import { sheetContextEnvelope } from '../../domain/contextEnvelopes'
+import { useSheetsStore } from '../../stores/sheetsStore'
 import { LoadingSpinner } from '../common/LoadingSpinner'
 import { EmptyState } from '../common/EmptyState'
 import { Modal } from '../common/Modal'
 import { cn } from '../../utils/cn'
-import type { Column, Sheet } from '../../types/sheets'
+import type { Column } from '../../types/sheets'
 import './SheetsView.css'
 
-// ── Inline Cell Editor ──────────────────────────────────────────────────
 function CellEditor({
   value,
   onSave,
@@ -51,14 +52,7 @@ function CellEditor({
   )
 }
 
-// ── Create Workbook Modal ───────────────────────────────────────────────
-function CreateWorkbookModal({
-  open,
-  onClose,
-}: {
-  open: boolean
-  onClose: () => void
-}) {
+function CreateWorkbookModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const createWorkbook = useSheetsStore((s) => s.createWorkbook)
   const selectWorkbook = useSheetsStore((s) => s.selectWorkbook)
   const [name, setName] = useState('')
@@ -84,48 +78,22 @@ function CreateWorkbookModal({
       <form onSubmit={handleSubmit}>
         <div className="sheets-form-group">
           <label>Name</label>
-          <input
-            className="sheets-form-input"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="My Workbook"
-            autoFocus
-          />
+          <input className="sheets-form-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="My Workbook" autoFocus />
         </div>
         <div className="sheets-form-group">
           <label>Description (optional)</label>
-          <input
-            className="sheets-form-input"
-            value={desc}
-            onChange={(e) => setDesc(e.target.value)}
-            placeholder="What is this workbook for?"
-          />
+          <input className="sheets-form-input" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="What is this workbook for?" />
         </div>
         <div className="sheets-form-actions">
-          <button type="button" className="sheets-btn sheets-btn-secondary" onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className="sheets-btn sheets-btn-primary"
-            disabled={!name.trim() || submitting}
-          >
-            {submitting ? 'Creating...' : 'Create'}
-          </button>
+          <button type="button" className="sheets-btn sheets-btn-secondary" onClick={onClose}>Cancel</button>
+          <button type="submit" className="sheets-btn sheets-btn-primary" disabled={!name.trim() || submitting}>{submitting ? 'Creating...' : 'Create'}</button>
         </div>
       </form>
     </Modal>
   )
 }
 
-// ── Create Sheet Modal ──────────────────────────────────────────────────
-function CreateSheetModal({
-  open,
-  onClose,
-}: {
-  open: boolean
-  onClose: () => void
-}) {
+function CreateSheetModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const createSheet = useSheetsStore((s) => s.createSheet)
   const selectSheet = useSheetsStore((s) => s.selectSheet)
   const [name, setName] = useState('')
@@ -136,11 +104,8 @@ function CreateSheetModal({
   const removeColumn = (i: number) => setColumns(columns.filter((_, idx) => idx !== i))
   const updateColumn = (i: number, field: 'name' | 'type', val: string) => {
     const next = [...columns]
-    if (field === 'type') {
-      next[i] = { ...next[i], type: val as Column['type'] }
-    } else {
-      next[i] = { ...next[i], name: val }
-    }
+    if (field === 'type') next[i] = { ...next[i], type: val as Column['type'] }
+    else next[i] = { ...next[i], name: val }
     setColumns(next)
   }
 
@@ -164,29 +129,15 @@ function CreateSheetModal({
       <form onSubmit={handleSubmit}>
         <div className="sheets-form-group">
           <label>Sheet Name</label>
-          <input
-            className="sheets-form-input"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Sheet 1"
-            autoFocus
-          />
+          <input className="sheets-form-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Sheet 1" autoFocus />
         </div>
         <div className="sheets-form-group">
           <label>Columns</label>
           <div className="sheets-columns-list">
             {columns.map((col, i) => (
               <div key={i} className="sheets-column-row">
-                <input
-                  className="sheets-form-input"
-                  value={col.name}
-                  onChange={(e) => updateColumn(i, 'name', e.target.value)}
-                  placeholder="Column name"
-                />
-                <select
-                  value={col.type}
-                  onChange={(e) => updateColumn(i, 'type', e.target.value)}
-                >
+                <input className="sheets-form-input" value={col.name} onChange={(e) => updateColumn(i, 'name', e.target.value)} placeholder="Column name" />
+                <select value={col.type} onChange={(e) => updateColumn(i, 'type', e.target.value)}>
                   <option value="text">Text</option>
                   <option value="number">Number</option>
                   <option value="boolean">Boolean</option>
@@ -194,40 +145,22 @@ function CreateSheetModal({
                   <option value="json">JSON</option>
                 </select>
                 {columns.length > 1 && (
-                  <button
-                    type="button"
-                    className="sheets-column-remove"
-                    onClick={() => removeColumn(i)}
-                    aria-label="Remove column"
-                  >
-                    &times;
-                  </button>
+                  <button type="button" className="sheets-column-remove" onClick={() => removeColumn(i)} aria-label="Remove column">&times;</button>
                 )}
               </div>
             ))}
           </div>
-          <button type="button" className="sheets-add-btn" onClick={addColumn}>
-            + Add column
-          </button>
+          <button type="button" className="sheets-add-btn" onClick={addColumn}>+ Add column</button>
         </div>
         <div className="sheets-form-actions">
-          <button type="button" className="sheets-btn sheets-btn-secondary" onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className="sheets-btn sheets-btn-primary"
-            disabled={!name.trim() || columns.every((c) => !c.name.trim()) || submitting}
-          >
-            {submitting ? 'Creating...' : 'Create Sheet'}
-          </button>
+          <button type="button" className="sheets-btn sheets-btn-secondary" onClick={onClose}>Cancel</button>
+          <button type="submit" className="sheets-btn sheets-btn-primary" disabled={!name.trim() || columns.every((c) => !c.name.trim()) || submitting}>{submitting ? 'Creating...' : 'Create Sheet'}</button>
         </div>
       </form>
     </Modal>
   )
 }
 
-// ── Data Grid ───────────────────────────────────────────────────────────
 function DataGrid() {
   const rows = useSheetsStore((s) => s.rows)
   const sheets = useSheetsStore((s) => s.sheets)
@@ -246,53 +179,35 @@ function DataGrid() {
 
   const currentSheet = sheets.find((s) => s.id === selectedSheetId)
   const columns = currentSheet?.columns || []
+  const effectiveColumns: Column[] = columns.length > 0
+    ? columns
+    : rows.length > 0
+      ? Object.keys(rows[0].data).map((k) => ({ name: k, type: 'text' as const }))
+      : []
 
-  // Derive columns from row data if sheet has no explicit columns
-  const effectiveColumns: Column[] =
-    columns.length > 0
-      ? columns
-      : rows.length > 0
-        ? Object.keys(rows[0].data).map((k) => ({ name: k, type: 'text' as const }))
-        : []
-
-  const handleCellSave = useCallback(
-    async (rowId: string, colName: string, value: string) => {
-      setEditingCell(null)
-      const row = rows.find((r) => r.id === rowId)
-      if (!row) return
-      const currentVal = String(row.data[colName] ?? '')
-      if (value === currentVal) return
-      await updateRow(rowId, { ...row.data, [colName]: value })
-    },
-    [rows, updateRow],
-  )
+  const handleCellSave = useCallback(async (rowId: string, colName: string, value: string) => {
+    setEditingCell(null)
+    const row = rows.find((r) => r.id === rowId)
+    if (!row) return
+    const currentVal = String(row.data[colName] ?? '')
+    if (value === currentVal) return
+    await updateRow(rowId, { ...row.data, [colName]: value })
+  }, [rows, updateRow])
 
   const handleAddRow = async () => {
     if (Object.values(newRowData).every((v) => !v.trim())) return
     const data: Record<string, unknown> = {}
-    for (const col of effectiveColumns) {
-      data[col.name] = newRowData[col.name] || ''
-    }
+    for (const col of effectiveColumns) data[col.name] = newRowData[col.name] || ''
     await createRow(data)
     setNewRowData({})
     setAddingRow(false)
-  }
-
-  const handleDeleteRow = async (rowId: string) => {
-    await deleteRow(rowId)
   }
 
   const pageSize = 100
   const hasNext = rowsOffset + pageSize < rowsTotal
   const hasPrev = rowsOffset > 0
 
-  if (loadingRows && rows.length === 0) {
-    return (
-      <div className="sheets-loading">
-        <LoadingSpinner size={32} />
-      </div>
-    )
-  }
+  if (loadingRows && rows.length === 0) return <div className="sheets-loading"><LoadingSpinner size={32} /></div>
 
   if (effectiveColumns.length === 0 && rows.length === 0) {
     return (
@@ -300,14 +215,7 @@ function DataGrid() {
         <EmptyState
           title="Empty sheet"
           description="This sheet has no data yet. Add a row to get started."
-          action={
-            <button
-              className="sheets-btn sheets-btn-primary"
-              onClick={() => setAddingRow(true)}
-            >
-              + Add Row
-            </button>
-          }
+          action={<button className="sheets-btn sheets-btn-primary" onClick={() => setAddingRow(true)}>+ Add Row</button>}
         />
       </div>
     )
@@ -320,9 +228,7 @@ function DataGrid() {
           <thead>
             <tr>
               <th className="col-row-num">#</th>
-              {effectiveColumns.map((col) => (
-                <th key={col.name}>{col.name}</th>
-              ))}
+              {effectiveColumns.map((col) => <th key={col.name}>{col.name}</th>)}
               <th className="col-actions" />
             </tr>
           </thead>
@@ -331,43 +237,26 @@ function DataGrid() {
               <tr key={row.id}>
                 <td className="sheets-row-num">{rowsOffset + idx + 1}</td>
                 {effectiveColumns.map((col) => {
-                  const isEditing =
-                    editingCell?.rowId === row.id && editingCell?.col === col.name
+                  const isEditing = editingCell?.rowId === row.id && editingCell?.col === col.name
                   const rawVal = row.data[col.name]
                   const displayVal = rawVal == null ? '' : String(rawVal)
                   return (
                     <td key={col.name}>
                       {isEditing ? (
                         <div className="sheets-cell editing">
-                          <CellEditor
-                            value={displayVal}
-                            onSave={(v) => handleCellSave(row.id, col.name, v)}
-                            onCancel={() => setEditingCell(null)}
-                          />
+                          <CellEditor value={displayVal} onSave={(v) => handleCellSave(row.id, col.name, v)} onCancel={() => setEditingCell(null)} />
                         </div>
                       ) : (
-                        <div
-                          className="sheets-cell"
-                          onClick={() => setEditingCell({ rowId: row.id, col: col.name })}
-                        >
-                          {displayVal || '\u00A0'}
-                        </div>
+                        <div className="sheets-cell" onClick={() => setEditingCell({ rowId: row.id, col: col.name })}>{displayVal || '\u00A0'}</div>
                       )}
                     </td>
                   )
                 })}
                 <td className="sheets-row-actions">
-                  <button
-                    className="sheets-row-delete-btn"
-                    onClick={() => handleDeleteRow(row.id)}
-                    aria-label="Delete row"
-                  >
-                    &times;
-                  </button>
+                  <button className="sheets-row-delete-btn" onClick={() => void deleteRow(row.id)} aria-label="Delete row">&times;</button>
                 </td>
               </tr>
             ))}
-            {/* New row being added */}
             {addingRow && (
               <tr className="sheets-row-adding">
                 <td className="sheets-row-num">+</td>
@@ -377,29 +266,18 @@ function DataGrid() {
                       <input
                         className="sheets-cell-input"
                         value={newRowData[col.name] || ''}
-                        onChange={(e) =>
-                          setNewRowData((d) => ({ ...d, [col.name]: e.target.value }))
-                        }
+                        onChange={(e) => setNewRowData((d) => ({ ...d, [col.name]: e.target.value }))}
                         placeholder={col.name}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleAddRow()
-                          if (e.key === 'Escape') {
-                            setAddingRow(false)
-                            setNewRowData({})
-                          }
+                          if (e.key === 'Enter') void handleAddRow()
+                          if (e.key === 'Escape') { setAddingRow(false); setNewRowData({}) }
                         }}
                       />
                     </div>
                   </td>
                 ))}
                 <td className="sheets-row-actions">
-                  <button
-                    className="sheets-btn sheets-btn-primary"
-                    style={{ fontSize: 11, padding: '4px 8px' }}
-                    onClick={handleAddRow}
-                  >
-                    Save
-                  </button>
+                  <button className="sheets-btn sheets-btn-primary" style={{ fontSize: 11, padding: '4px 8px' }} onClick={() => void handleAddRow()}>Save</button>
                 </td>
               </tr>
             )}
@@ -407,55 +285,23 @@ function DataGrid() {
         </table>
       </div>
 
-      {/* Footer: Add row + pagination */}
       <div className="sheets-add-row">
-        {!addingRow && (
-          <button
-            className="sheets-btn sheets-btn-secondary"
-            onClick={() => setAddingRow(true)}
-          >
-            + Add Row
-          </button>
-        )}
-        {addingRow && (
+        {!addingRow ? (
+          <button className="sheets-btn sheets-btn-secondary" onClick={() => setAddingRow(true)}>+ Add Row</button>
+        ) : (
           <>
-            <button className="sheets-btn sheets-btn-primary" onClick={handleAddRow}>
-              Save Row
-            </button>
-            <button
-              className="sheets-btn sheets-btn-secondary"
-              onClick={() => {
-                setAddingRow(false)
-                setNewRowData({})
-              }}
-            >
-              Cancel
-            </button>
+            <button className="sheets-btn sheets-btn-primary" onClick={() => void handleAddRow()}>Save Row</button>
+            <button className="sheets-btn sheets-btn-secondary" onClick={() => { setAddingRow(false); setNewRowData({}) }}>Cancel</button>
           </>
         )}
       </div>
 
       {rowsTotal > pageSize && (
         <div className="sheets-pagination">
-          <span>
-            Showing {rowsOffset + 1}–{Math.min(rowsOffset + pageSize, rowsTotal)} of{' '}
-            {rowsTotal} rows
-          </span>
+          <span>Showing {rowsOffset + 1}–{Math.min(rowsOffset + pageSize, rowsTotal)} of {rowsTotal} rows</span>
           <div className="sheets-pagination-controls">
-            <button
-              className="sheets-page-btn"
-              disabled={!hasPrev}
-              onClick={() => loadRows(Math.max(0, rowsOffset - pageSize))}
-            >
-              Prev
-            </button>
-            <button
-              className="sheets-page-btn"
-              disabled={!hasNext}
-              onClick={() => loadRows(rowsOffset + pageSize)}
-            >
-              Next
-            </button>
+            <button className="sheets-page-btn" disabled={!hasPrev} onClick={() => loadRows(Math.max(0, rowsOffset - pageSize))}>Prev</button>
+            <button className="sheets-page-btn" disabled={!hasNext} onClick={() => loadRows(rowsOffset + pageSize)}>Next</button>
           </div>
         </div>
       )}
@@ -463,7 +309,6 @@ function DataGrid() {
   )
 }
 
-// ── Main SheetsView ─────────────────────────────────────────────────────
 export function SheetsView() {
   const workbooks = useSheetsStore((s) => s.workbooks)
   const selectedWorkbookId = useSheetsStore((s) => s.selectedWorkbookId)
@@ -479,21 +324,20 @@ export function SheetsView() {
   const [wbModalOpen, setWbModalOpen] = useState(false)
   const [sheetModalOpen, setSheetModalOpen] = useState(false)
   const [exportLoading, setExportLoading] = useState(false)
+  const [sendingContext, setSendingContext] = useState(false)
+  const [collaborationMessage, setCollaborationMessage] = useState<string | null>(null)
 
-  useEffect(() => {
-    loadWorkbooks()
-  }, [loadWorkbooks])
+  useEffect(() => { void loadWorkbooks() }, [loadWorkbooks])
 
   const currentSheet = sheets.find((s) => s.id === selectedSheetId)
+  const currentWorkbook = workbooks.find((w) => w.id === selectedWorkbookId)
 
   const handleExport = async (format: 'csv' | 'json') => {
     if (!selectedWorkbookId || !selectedSheetId) return
     setExportLoading(true)
     try {
       const data = await exportSheet(selectedWorkbookId, selectedSheetId, format)
-      const blob = new Blob([data], {
-        type: format === 'csv' ? 'text/csv' : 'application/json',
-      })
+      const blob = new Blob([data], { type: format === 'csv' ? 'text/csv' : 'application/json' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -512,75 +356,53 @@ export function SheetsView() {
     await deleteWorkbook(wbId)
   }
 
+  const askAicivAboutSheet = async () => {
+    if (!currentSheet || sendingContext) return
+    setSendingContext(true)
+    setCollaborationMessage(null)
+    try {
+      await sendChatMessage(sheetContextEnvelope(currentWorkbook, currentSheet, rowsTotal))
+      setCollaborationMessage('Sheet context delivered to the primary AICIV. No data change is assumed complete until the shared sheet verifies it.')
+    } catch (error) {
+      setCollaborationMessage(error instanceof Error ? error.message : 'Could not deliver sheet context')
+    } finally {
+      setSendingContext(false)
+    }
+  }
+
   return (
     <div className="sheets-view">
-      {/* Sidebar */}
       <div className="sheets-sidebar">
         <div className="sheets-sidebar-header">
           <h3>Workbooks</h3>
-          <button className="sheets-add-btn" onClick={() => setWbModalOpen(true)}>
-            +
-          </button>
+          <button className="sheets-add-btn" onClick={() => setWbModalOpen(true)}>+</button>
         </div>
         <div className="sheets-sidebar-list">
-          {loading && workbooks.length === 0 && (
-            <div className="sheets-loading" style={{ padding: '20px 0' }}>
-              <LoadingSpinner size={20} />
-            </div>
-          )}
+          {loading && workbooks.length === 0 && <div className="sheets-loading" style={{ padding: '20px 0' }}><LoadingSpinner size={20} /></div>}
           {workbooks.map((wb) => (
-            <button
-              key={wb.id}
-              className={cn('sheets-wb-item', selectedWorkbookId === wb.id && 'active')}
-              onClick={() => selectWorkbook(wb.id)}
-            >
+            <button key={wb.id} className={cn('sheets-wb-item', selectedWorkbookId === wb.id && 'active')} onClick={() => { setCollaborationMessage(null); void selectWorkbook(wb.id) }}>
               <span className="wb-icon">&#x1F4CA;</span>
               <span className="wb-name">{wb.name}</span>
-              <span
-                className="sheets-wb-delete"
-                onClick={(e) => handleDeleteWorkbook(wb.id, e)}
-                role="button"
-                aria-label="Delete workbook"
-              >
-                &times;
-              </span>
+              <span className="sheets-wb-delete" onClick={(e) => void handleDeleteWorkbook(wb.id, e)} role="button" aria-label="Delete workbook">&times;</span>
             </button>
           ))}
-          {!loading && workbooks.length === 0 && (
-            <div style={{ padding: '12px', color: 'var(--text-tertiary)', fontSize: 13 }}>
-              No workbooks yet
-            </div>
-          )}
+          {!loading && workbooks.length === 0 && <div style={{ padding: '12px', color: 'var(--text-tertiary)', fontSize: 13 }}>No workbooks yet</div>}
         </div>
 
-        {/* Sheet tabs */}
         {selectedWorkbookId && sheets.length > 0 && (
           <div className="sheets-tabs">
             <div className="sheets-tabs-label">Sheets</div>
             {sheets.map((sh) => (
-              <button
-                key={sh.id}
-                className={cn('sheets-tab', selectedSheetId === sh.id && 'active')}
-                onClick={() => selectSheet(sh.id)}
-              >
-                {sh.name}
-              </button>
+              <button key={sh.id} className={cn('sheets-tab', selectedSheetId === sh.id && 'active')} onClick={() => { setCollaborationMessage(null); void selectSheet(sh.id) }}>{sh.name}</button>
             ))}
-            <button className="sheets-add-btn" onClick={() => setSheetModalOpen(true)}>
-              + Add Sheet
-            </button>
+            <button className="sheets-add-btn" onClick={() => setSheetModalOpen(true)}>+ Add Sheet</button>
           </div>
         )}
         {selectedWorkbookId && sheets.length === 0 && !loading && (
-          <div className="sheets-tabs">
-            <button className="sheets-add-btn" onClick={() => setSheetModalOpen(true)}>
-              + Create first sheet
-            </button>
-          </div>
+          <div className="sheets-tabs"><button className="sheets-add-btn" onClick={() => setSheetModalOpen(true)}>+ Create first sheet</button></div>
         )}
       </div>
 
-      {/* Main area */}
       <div className="sheets-main">
         {selectedSheetId && currentSheet ? (
           <>
@@ -589,67 +411,33 @@ export function SheetsView() {
                 <span className="sheets-toolbar-title">{currentSheet.name}</span>
                 <span className="sheets-toolbar-meta">
                   {rowsTotal} row{rowsTotal !== 1 ? 's' : ''}
-                  {currentSheet.columns?.length
-                    ? ` / ${currentSheet.columns.length} col${currentSheet.columns.length !== 1 ? 's' : ''}`
-                    : ''}
+                  {currentSheet.columns?.length ? ` / ${currentSheet.columns.length} col${currentSheet.columns.length !== 1 ? 's' : ''}` : ''}
                 </span>
               </div>
               <div className="sheets-toolbar-actions">
-                <button
-                  className="sheets-btn sheets-btn-secondary"
-                  onClick={() => handleExport('csv')}
-                  disabled={exportLoading}
-                >
-                  Export CSV
-                </button>
-                <button
-                  className="sheets-btn sheets-btn-secondary"
-                  onClick={() => handleExport('json')}
-                  disabled={exportLoading}
-                >
-                  Export JSON
-                </button>
+                <button className="sheets-btn sheets-btn-primary" onClick={() => void askAicivAboutSheet()} disabled={sendingContext}>{sendingContext ? 'Sending…' : 'Ask AICIV'}</button>
+                <button className="sheets-btn sheets-btn-secondary" onClick={() => handleExport('csv')} disabled={exportLoading}>Export CSV</button>
+                <button className="sheets-btn sheets-btn-secondary" onClick={() => handleExport('json')} disabled={exportLoading}>Export JSON</button>
               </div>
             </div>
+            {collaborationMessage && <div className="sheets-collaboration-status" role="status">{collaborationMessage}</div>}
             <DataGrid />
           </>
         ) : (
           <div className="sheets-empty">
             <EmptyState
-              icon={selectedWorkbookId ? undefined : undefined}
-              title={
-                selectedWorkbookId
-                  ? 'Select or create a sheet'
-                  : 'Data Dashboard'
-              }
-              description={
-                selectedWorkbookId
-                  ? 'Pick a sheet from the sidebar or create a new one.'
-                  : 'Select a workbook from the sidebar to view its data, or create a new one to get started.'
-              }
-              action={
-                !selectedWorkbookId ? (
-                  <button
-                    className="sheets-btn sheets-btn-primary"
-                    onClick={() => setWbModalOpen(true)}
-                  >
-                    + New Workbook
-                  </button>
-                ) : (
-                  <button
-                    className="sheets-btn sheets-btn-primary"
-                    onClick={() => setSheetModalOpen(true)}
-                  >
-                    + New Sheet
-                  </button>
-                )
-              }
+              title={selectedWorkbookId ? 'Select or create a sheet' : 'Data Dashboard'}
+              description={selectedWorkbookId ? 'Pick a sheet from the sidebar or create a new one.' : 'Select a workbook from the sidebar to view its data, or create a new one to get started.'}
+              action={!selectedWorkbookId ? (
+                <button className="sheets-btn sheets-btn-primary" onClick={() => setWbModalOpen(true)}>+ New Workbook</button>
+              ) : (
+                <button className="sheets-btn sheets-btn-primary" onClick={() => setSheetModalOpen(true)}>+ New Sheet</button>
+              )}
             />
           </div>
         )}
       </div>
 
-      {/* Modals */}
       <CreateWorkbookModal open={wbModalOpen} onClose={() => setWbModalOpen(false)} />
       <CreateSheetModal open={sheetModalOpen} onClose={() => setSheetModalOpen(false)} />
     </div>
