@@ -6,11 +6,13 @@ on:
       - "presence_bridge.py"
       - "aiciv_inbox.py"
       - "aiciv_projects.py"
+      - "aiciv_collaboration.py"
       - "portal_entrypoint.py"
       - "start.sh"
       - "test_presence_bridge.py"
       - "test_aiciv_inbox.py"
       - "test_aiciv_projects.py"
+      - "test_aiciv_collaboration.py"
       - "react-portal/**"
       - ".github/workflows/portal-voice-ci.yml"
   push:
@@ -19,11 +21,13 @@ on:
       - "presence_bridge.py"
       - "aiciv_inbox.py"
       - "aiciv_projects.py"
+      - "aiciv_collaboration.py"
       - "portal_entrypoint.py"
       - "start.sh"
       - "test_presence_bridge.py"
       - "test_aiciv_inbox.py"
       - "test_aiciv_projects.py"
+      - "test_aiciv_collaboration.py"
       - "react-portal/**"
       - ".github/workflows/portal-voice-ci.yml"
 
@@ -42,13 +46,15 @@ jobs:
       - name: Install focused Portal test dependencies
         run: pip install starlette httpx
       - name: Compile AICIV extension modules
-        run: python -m py_compile presence_bridge.py aiciv_inbox.py aiciv_projects.py portal_entrypoint.py
+        run: python -m py_compile presence_bridge.py aiciv_inbox.py aiciv_projects.py aiciv_collaboration.py portal_entrypoint.py
       - name: Run Presence bridge tests
         run: python test_presence_bridge.py
       - name: Run shared AICIV inbox tests
         run: python test_aiciv_inbox.py
       - name: Run shared AICIV project tests
         run: python test_aiciv_projects.py
+      - name: Run shared collaboration tests
+        run: python test_aiciv_collaboration.py
 
   frontend:
     runs-on: ubuntu-latest
