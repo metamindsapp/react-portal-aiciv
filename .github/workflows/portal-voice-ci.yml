@@ -49,9 +49,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      # npm install is intentional for this first SDK integration: package.json
-      # adds @elevenlabs/react and the existing lockfile predates that dependency.
-      # Once the lock is refreshed in a normal checkout, we can tighten to npm ci.
+      # npm install is intentional until the repository's existing lockfile is
+      # refreshed to include the newly introduced ElevenLabs SDK dependency.
       - run: npm install
+      - name: Audit shipped production dependencies
+        # Dev/build tooling advisories are still visible in npm install output,
+        # but only high/critical vulnerabilities reachable from the production
+        # dependency tree block a client-facing release here.
+        run: npm audit --omit=dev --audit-level=high
       - run: npm run build
       - run: npm test
