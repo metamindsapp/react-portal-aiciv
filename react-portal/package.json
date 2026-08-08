@@ -12,6 +12,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@elevenlabs/react": "1.11.0",
     "date-fns": "^4.1.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",

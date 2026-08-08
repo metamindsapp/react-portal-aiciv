@@ -107,7 +107,12 @@ export async function fetchTasks(): Promise<{ tasks: ScheduledTask[] }> {
     time_max: max.toISOString(),
     limit: '250',
   })
-  const data = await apiGet<{ events: AgentCalEvent[] }>(`/api/agentcal/events?${params}`)
+
+  // Current Portal backend returns AgentCal `events`. Older Portal instances
+  // and the original React contract returned already-normalized `tasks`. Keep
+  // both shapes working so rolling fleet upgrades do not blank the calendar.
+  const data = await apiGet<{ events?: AgentCalEvent[]; tasks?: ScheduledTask[] }>(`/api/agentcal/events?${params}`)
+  if (Array.isArray(data.tasks)) return { tasks: data.tasks }
   return { tasks: (data.events || []).map(eventToTask) }
 }
 
