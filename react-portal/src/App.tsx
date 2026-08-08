@@ -22,19 +22,22 @@ import { HubView } from './components/hub/HubView'
 import { PointsView } from './components/points/PointsView'
 import { BrowserView } from './components/browser/BrowserView'
 import { TgimView } from './components/tgim/TgimView'
+import { useBookmarkStore } from './stores/bookmarkStore'
 import { useIdentityStore } from './stores/identityStore'
 import { useSettingsStore } from './stores/settingsStore'
 
 function AuthenticatedApp() {
   const fetchIdentity = useIdentityStore(s => s.fetchIdentity)
   const fetchStatusInfo = useIdentityStore(s => s.fetchStatusInfo)
+  const loadSharedReferences = useBookmarkStore(s => s.load)
 
   useEffect(() => {
     fetchIdentity()
     fetchStatusInfo()
+    void loadSharedReferences()
     const interval = setInterval(fetchStatusInfo, 30_000)
     return () => clearInterval(interval)
-  }, [fetchIdentity, fetchStatusInfo])
+  }, [fetchIdentity, fetchStatusInfo, loadSharedReferences])
 
   return (
     <>

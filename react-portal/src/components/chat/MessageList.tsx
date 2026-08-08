@@ -5,7 +5,13 @@ import './MessageList.css'
 
 interface MessageListProps {
   messages: ChatMessage[]
-  onReact: (msgId: string, emoji: string, text: string, role: 'user' | 'assistant') => void
+  onReact: (
+    msgId: string,
+    emoji: string,
+    action: 'add' | 'remove',
+    text: string,
+    role: 'user' | 'assistant',
+  ) => void
   highlightIds?: Set<string>
   focusMessageId?: string | null
   onFocusHandled?: () => void
@@ -58,7 +64,7 @@ export function MessageList({
           <MessageBubble
             key={msg.id}
             message={msg}
-            onReact={(emoji) => onReact(msg.id, emoji, msg.text, msg.role)}
+            onReact={(emoji, action) => onReact(msg.id, emoji, action, msg.text, msg.role)}
             highlight={highlightIds?.has(msg.id)}
             onPreviewArtifact={onPreviewArtifact}
           />

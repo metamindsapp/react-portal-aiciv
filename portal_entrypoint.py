@@ -19,6 +19,7 @@ import sys
 import uvicorn
 
 import portal_server
+from aiciv_collaboration import register_collaboration_routes
 from aiciv_inbox import register_aiciv_inbox_routes
 from aiciv_projects import register_aiciv_project_routes
 from presence_bridge import register_presence_routes
@@ -35,6 +36,10 @@ register_aiciv_inbox_routes(
     check_auth=portal_server.check_auth,
 )
 register_aiciv_project_routes(
+    portal_server.app,
+    check_auth=portal_server.check_auth,
+)
+register_collaboration_routes(
     portal_server.app,
     check_auth=portal_server.check_auth,
 )

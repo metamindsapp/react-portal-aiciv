@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { fetchChatHistory, sendChatMessage, sendReaction } from '../api/chat'
+import { fetchCollaborationState, persistReactionSummary } from '../api/collaboration'
 import { chatWs } from '../api/websocket'
-import type { ChatMessage } from '../types/chat'
+import type { ChatMessage, Reaction } from '../types/chat'
 
 let wsCleanup: (() => void) | null = null
 
@@ -15,12 +16,50 @@ interface ChatState {
   setFocusMessageId: (messageId: string | null) => void
   loadHistory: () => Promise<void>
   send: (text: string) => Promise<void>
-  react: (msgId: string, emoji: string, msgText: string, msgRole: 'user' | 'assistant') => Promise<void>
+  react: (
+    msgId: string,
+    emoji: string,
+    action: 'add' | 'remove',
+    msgText: string,
+    msgRole: 'user' | 'assistant',
+  ) => Promise<void>
   connectWs: () => void
   disconnectWs: () => void
 }
 
-export const useChatStore = create<ChatState>((set) => ({
+function mergeReactionMaps(message: ChatMessage, shared: Record<string, Reaction[]>): ChatMessage {
+  const sharedReactions = shared[message.id]
+  if (!sharedReactions?.length) return message
+  return { ...message, reactions: sharedReactions }
+}
+
+function applyReaction(
+  reactions: Reaction[] | undefined,
+  emoji: string,
+  action: 'add' | 'remove',
+): Reaction[] {
+  const next = (reactions || []).map((reaction) => ({ ...reaction }))
+  const index = next.findIndex((reaction) => reaction.emoji === emoji)
+
+  if (action === 'add') {
+    if (index >= 0) {
+      if (!next[index].mine) {
+        next[index].mine = true
+        next[index].count += 1
+      }
+    } else {
+      next.push({ emoji, count: 1, mine: true })
+    }
+  } else if (index >= 0 && next[index].mine) {
+    next[index].mine = false
+    next[index].count = Math.max(0, next[index].count - 1)
+    if (next[index].count === 0) next.splice(index, 1)
+  }
+
+  return next
+}
+
+export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   loading: false,
   sending: false,
@@ -33,8 +72,11 @@ export const useChatStore = create<ChatState>((set) => ({
   loadHistory: async () => {
     set({ loading: true, error: null })
     try {
-      const data = await fetchChatHistory(200)
-      const msgs = data.messages || []
+      const [history, collaboration] = await Promise.all([
+        fetchChatHistory(200),
+        fetchCollaborationState().catch(() => ({ version: 1, bookmarks: [], reactions: {} })),
+      ])
+      const msgs = (history.messages || []).map((message) => mergeReactionMaps(message, collaboration.reactions))
       set({ messages: msgs, loading: false })
     } catch (e) {
       set({ loading: false, error: e instanceof Error ? e.message : 'Failed to load chat' })
@@ -42,7 +84,7 @@ export const useChatStore = create<ChatState>((set) => ({
   },
 
   send: async (text: string) => {
-    set({ sending: true })
+    set({ sending: true, error: null })
     try {
       await sendChatMessage(text)
       const userMsg: ChatMessage = {
@@ -54,21 +96,35 @@ export const useChatStore = create<ChatState>((set) => ({
       set(s => ({ messages: [...s.messages, userMsg], sending: false }))
     } catch (e) {
       console.error('[chat] send failed:', e)
-      set({ sending: false })
+      set({ sending: false, error: e instanceof Error ? e.message : 'Message delivery failed' })
     }
   },
 
-  react: async (msgId: string, emoji: string, msgText: string, msgRole: 'user' | 'assistant') => {
+  react: async (msgId, emoji, action, msgText, msgRole) => {
+    const before = get().messages
+    const target = before.find((message) => message.id === msgId)
+    if (!target) return
+    const reactions = applyReaction(target.reactions, emoji, action)
+
+    set({
+      messages: before.map((message) =>
+        message.id === msgId ? { ...message, reactions } : message,
+      ),
+      error: null,
+    })
+
     try {
       await sendReaction({
         msg_id: msgId,
         emoji,
-        action: 'add',
+        action,
         msg_preview: msgText.slice(0, 200),
         msg_role: msgRole,
       })
+      await persistReactionSummary(msgId, reactions)
     } catch (e) {
       console.error('[chat] reaction failed:', e)
+      set({ messages: before, error: e instanceof Error ? e.message : 'Reaction failed' })
     }
   },
 
@@ -79,14 +135,17 @@ export const useChatStore = create<ChatState>((set) => ({
     }
 
     chatWs.connect()
-    set({ wsConnected: true })
+    set({ wsConnected: chatWs.connected })
 
     wsCleanup = chatWs.onMessage((msg) => {
       set((s) => {
         const idx = s.messages.findIndex(m => m.id === msg.id)
         if (idx >= 0) {
           const updated = [...s.messages]
-          updated[idx] = msg
+          updated[idx] = {
+            ...msg,
+            reactions: msg.reactions ?? updated[idx].reactions,
+          }
           return { messages: updated }
         }
 
