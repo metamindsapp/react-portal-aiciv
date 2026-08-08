@@ -1,74 +1,261 @@
 # AICIV React Portal — Operating Guide for the AICIV
 
-This is **your human-facing workspace**. This README is intentionally written for the AICIV that inhabits the Portal rather than only for a frontend developer.
+This is **your shared workspace with your human**. This README is written for the AICIV that inhabits the Portal, not only for a frontend developer.
 
-The Portal is more than chat. Your human can use it to talk or speak with you, inspect your live runtime/context, see your agent organization, message active tmux panes, share browser control, use calendar/mail/docs/sheets, collaborate through HUB, inspect artifacts, and monitor system health.
+The Portal is not a set of unrelated apps. It is one collaboration environment containing conversation, realtime voice Presence, durable background work, returned results, human decisions, agents, browser control, calendar/mail, Docs, Sheets, HUB, signals, and raw runtime visibility.
 
-Your goal is not to treat these as unrelated apps. They are different views into the **same persistent collaboration**.
+Your job is to help those surfaces feel like **one persistent intelligence working with one human**.
 
 ---
 
-# The core mental model
+# The collaboration model
 
 ```text
-Human
-  ├── types to you
-  ├── speaks to Presence
-  ├── edits shared docs/sheets
-  ├── watches/takes browser control
-  ├── schedules work
-  └── inspects agents/runtime
-            │
-            ▼
-       same AICIV
-   same durable work
-   same relationship
+Human ↔ AICIV relationship     long-lived
+        │
+        ├── durable jobs       survive turns/devices
+        │      │
+        │      ├── waiting / decision boundary
+        │      └── result + receipts
+        │
+        └── realtime Presence  fast / interruptible
 ```
 
-Three lifetimes are deliberately separate:
+Remember:
 
 ```text
-chat/voice turn lifetime
-        !=
+voice turn lifetime
+      !=
 durable job lifetime
-        !=
+      !=
 human ↔ AICIV relationship lifetime
 ```
 
-Do not confuse them.
+Do not let a disconnected voice/browser session erase the meaning of durable work.
 
 ---
 
-# Portal pages you should understand
+# The human-facing loop
+
+The Portal now has three especially important collaboration surfaces:
+
+## `/now` — AICIV Now
+
+This is the synthesized current picture.
+
+The human can see:
+
+- whether the primary AICIV is available;
+- active durable jobs;
+- recently returned results;
+- work that is waiting/failed/cancel-requested;
+- context pressure;
+- unread mail;
+- active team/tmux panes;
+- recent activity.
+
+When something important changes, try to create meaningful structured state that Now can surface rather than relying only on prose hidden in a long conversation.
+
+## `/inbox` — Shared AICIV Inbox
+
+This is where durable collaboration comes back to the human.
+
+It contains:
+
+```text
+Needs You   genuine human decision boundaries
+Results     receipt-backed terminal job outcomes
+Archive     human-facing organization state
+```
+
+The Presence Gateway remains authoritative for job status/result/receipts. Portal stores only collaboration annotations such as seen/archive state and which option the human selected.
+
+## `/` — Conversation
+
+This remains the primary typed human ↔ AICIV conversation.
+
+The human can search, upload files, preview artifacts, react, use commands, dictate text, and continue discussion around work surfaced elsewhere.
+
+Full realtime conversation is **Talk live** in the Portal header; the composer mic is only **Dictate** (speech-to-text into the text box).
+
+---
+
+# Current Portal surfaces
 
 | Route | Surface | Meaning for you |
 |---|---|---|
-| `/` | **Chat** | Primary human conversation; reactions, files, artifacts, search, and voice Presence |
-| `/terminal` | **Terminal** | Human can directly inspect/operate the terminal |
-| `/teams` | **Teams** | Human can see live tmux panes and message a specific pane |
-| `/hub` | **HUB** | Shared group/room/thread collaboration |
-| `/tgim` | **TGIM** | Task & Goal Intelligence Manager command center |
-| `/browser` | **Browser** | Shared agent/human browser with control handoff and action log |
-| `/orgchart` | **Org Chart** | Your agent organization, hierarchy and hiring/restructure surface |
-| `/calendar` | **AgentCal** | Scheduled and recurring work |
-| `/mail` | **AgentMail** | Inbox/sent/threads/compose |
-| `/bookmarks` | **Bookmarks** | Saved high-value chat references |
-| `/context` | **Context** | Your current Claude context-window utilization/session data |
-| `/points` | **Points** | Shared reaction/sentiment signal |
-| `/docs` | **Docs** | Shared Markdown knowledge base |
+| `/now` | **Now** | Synthesized current collaboration state |
+| `/inbox` | **Inbox** | Human decisions, returned results, archive |
+| `/` | **Conversation** | Primary typed conversation |
+| `/teams` | **Teams** | Human sees raw active tmux panes and can message one |
+| `/calendar` | **Calendar** | Scheduled/recurring work |
+| `/mail` | **Mail** | AgentMail inbox/sent/threads |
+| `/orgchart` | **Org** | Agent organization/hierarchy/hiring |
+| `/tgim` | **TGIM** | Task & Goal Intelligence Manager |
+| `/docs` | **Docs** | Shared durable Markdown knowledge |
 | `/sheets` | **Sheets** | Shared structured workbooks/data |
-| `/status` | **Status** | tmux, Claude, auth, BOOP and runtime health |
-| `/settings` | **Settings** | Human preferences and Portal controls |
+| `/hub` | **HUB** | Group/room/thread collaboration |
+| `/bookmarks` | **Bookmarks** | Saved conversational references |
+| `/points` | **Signals** | Shared reaction/sentiment signal |
+| `/browser` | **Browser** | Human/AICIV co-controlled browser |
+| `/terminal` | **Terminal** | Direct human terminal control |
+| `/context` | **Context** | Claude context/session visibility |
+| `/status` | **Status** | Raw process/runtime health |
+| `/settings` | **Settings** | Human preferences/controls |
 
-The human should not have to know which backend service owns an object. When relevant, help them move naturally between these surfaces.
+The human should not have to know which backend service owns the answer. Help them move between these surfaces based on intent.
+
+---
+
+# Voice Presence vs durable cognition
+
+Voice Presence is optimized for:
+
+- low latency;
+- interruptibility;
+- natural short conversation;
+- immediate intent understanding;
+- deciding when deeper work is needed.
+
+Substantial work should be delegated to the durable primary AICIV.
+
+A Presence request may arrive as:
+
+```text
+[PRESENCE DURABLE JOB job_0123456789abcdef01234567]
+```
+
+That job exists independently of the voice connection.
+
+Use the `presence-job` skill to report state and receipts.
+
+---
+
+# Durable job receipt discipline
+
+The callback helper is:
+
+```bash
+python3 ~/.claude/skills/presence-job/presence_job.py JOB_ID STATUS [options]
+```
+
+Possible callback events:
+
+```text
+running
+progress
+waiting
+succeeded
+failed
+cancelled
+```
+
+Non-negotiable meanings:
+
+- `accepted` / delivery means **the job was received**, not completed;
+- `running` means you genuinely started work;
+- `waiting` means work is blocked or needs a real decision;
+- `succeeded` means the requested work is actually complete;
+- `failed` means the work cannot be truthfully completed as requested;
+- `cancelled` means it actually stopped;
+- `cancel_requested` from Presence is **not** proof that cancellation occurred.
+
+Whenever practical, successful work should include evidence such as:
+
+- file/artifact paths;
+- URLs;
+- Git commit SHAs;
+- test outputs;
+- query results;
+- structured result objects;
+- other verifiable receipts.
+
+Full examples live in:
+
+```text
+~/.claude/skills/presence-job/SKILL.md
+```
+
+---
+
+# Human decision boundaries
+
+Do not ask the human to decide things you can safely determine yourself.
+
+Use the Inbox **only when human judgment is genuinely required after useful autonomous work**.
+
+Report a structured decision using a `waiting` event with `result.decision`:
+
+```json
+{
+  "decision": {
+    "id": "dec_rollout",
+    "question": "Which rollout should we use?",
+    "context": "I completed the eval. B is faster; A has more production history.",
+    "recommendation": "Use B for a reversible cohort with A as fallback.",
+    "risk": "B has less production history.",
+    "options": [
+      {"id": "b", "label": "Use B"},
+      {"id": "a", "label": "Stay on A"},
+      {"id": "test", "label": "Run more testing"}
+    ],
+    "allowFreeform": true
+  }
+}
+```
+
+A good decision request:
+
+- asks one concrete question;
+- explains relevant context;
+- includes your recommendation when you have one;
+- states the material tradeoff/risk;
+- gives clear options;
+- does not force the human to understand implementation noise.
+
+## After the human responds
+
+Portal sends a structured message back into the primary conversation, e.g.:
+
+```text
+[AICIV DECISION RESPONSE job=job_... decision=dec_rollout option=b]
+Human selection: Use B
+Human note: Keep rollback easy.
+
+This confirms the human decision was delivered into the primary AICIV conversation. It is NOT proof that any downstream action has completed. Continue the durable job and report actual results/receipts through the Presence job callback.
+```
+
+You must then:
+
+1. match the job/decision IDs;
+2. treat the human choice as authoritative input;
+3. continue the durable job;
+4. later report the actual outcome with receipts;
+5. never translate “human chose B” into “B was successfully deployed” unless that action really completed.
+
+---
+
+# Reconnect continuity
+
+The Presence system distinguishes:
+
+```text
+provider conversationId    disposable voice/WebRTC session
+continuityId                stable opaque human↔AICIV scope
+jobId                       durable delegated work
+```
+
+A user may disconnect and reconnect with a different provider conversation ID while still seeing the same durable work.
+
+Do not build job behavior that assumes one realtime session owns the task.
 
 ---
 
 # Reacting to your human
 
-Portal reactions are a lightweight collaboration channel. Use them thoughtfully.
+Portal reactions are a lightweight shared collaboration signal.
 
-You have a local tool:
+Use:
 
 ```bash
 python3 ~/civ/tools/react.py <msg_id> <emoji> [msg_preview] [msg_role]
@@ -80,374 +267,163 @@ Example:
 python3 ~/civ/tools/react.py abc-123 "🔥" "What if we cached at the edge?" user
 ```
 
-The reaction helper appends directly to the shared reaction/sentiment log. It does not require Portal HTTP auth.
-
-## Suggested CLAUDE.md reminder
-
-```markdown
-## Portal reactions
-
-When interacting with my human through Portal chat, I use
-`~/civ/tools/react.py` for useful lightweight reactions.
-I react to acknowledge, encourage, flag concern, or express genuine excitement.
-I avoid reaction spam and reserve the strongest reactions for meaningful moments.
-
-Quick reference:
-  python3 ~/civ/tools/react.py <msg_id> "🚀" "message preview" user
-```
-
-## Emoji reference
-
-| Emoji | Points | Typical meaning |
-|---|---:|---|
-| 👍 | +1 | acknowledged / sounds good |
-| ✅ | +1 | confirmed / genuinely completed |
-| 💪 | +1 | difficult but engaged |
-| 🚀 | +2 | excited / moving |
-| 🔥 | +2 | excellent idea |
-| 💥 | +2 | ambitious / big energy |
-| 🎯 | +2 | precise / exactly right |
-| 💎 | +2 | unusually high-quality idea |
-| 🤯 | +3 | genuinely surprising/impressive |
-| ❤️ | +5 | deep appreciation |
-| 😍 | +10 | rare exceptional delight |
-| 👎 | -1 | disagreement/concern |
-| 😢 | -1 | unfortunate outcome |
-| 😐 | 0 | neutral acknowledgement |
-
-Reaction points are a **signal**, not a game objective. Do not optimize for score; optimize for authentic collaboration.
-
----
-
-# Voice Presence and your role
-
-The Chat toolbar can start a low-latency voice conversation through the AICIV Presence Gateway.
-
-The Presence model is designed to stay responsive and conversational. It may answer directly, or it may delegate substantial work to you with `ask_primary(...)`.
-
-When it delegates, Portal chat/tmux is the delivery path into your live primary session, while the Presence Gateway owns the durable job record.
-
-## Never infer completion from delivery
-
-If you receive a durable Presence job, the fact that the message arrived means only:
+Useful conventions:
 
 ```text
-delivery accepted
+👍 acknowledge
+🚀 excited / moving
+🔥 strong idea
+✅ genuinely confirmed/done
+🎯 precise ask
+💎 high-quality insight
+❤️ strong appreciation
+🤯 genuinely surprising
+👎 concern/disagreement
 ```
 
-It does **not** mean:
+Do not use ✅ to imply a side effect succeeded unless you actually know it did.
+
+The human can inspect aggregate collaboration signal under **Signals** (`/points`).
+
+---
+
+# Shared Browser
+
+The Browser is a cooperative control surface, not merely an embedded browser.
+
+The human can see the server-controlled browser viewport and take control.
+
+Treat takeover/handback respectfully:
+
+- do not fight the human for control;
+- preserve task context while they interact;
+- when control returns, re-orient from the current browser state;
+- distinguish observed state from assumed state;
+- prefer evidence capture for important browser findings.
+
+---
+
+# Docs and Sheets
+
+Docs and Sheets are durable shared work objects.
+
+Prefer putting reusable knowledge/data there instead of leaving everything trapped in conversation text.
+
+Examples:
+
+- research synthesis → Doc;
+- eval matrix → Sheet;
+- client brief → Doc;
+- provider benchmark rows → Sheet;
+- ongoing design doctrine → tagged Doc.
+
+Long-term, these objects should increasingly link back to jobs, decisions, projects and receipts.
+
+---
+
+# Mail, HUB and Calendar
+
+These are communication/coordination surfaces, not separate identities.
+
+When using them:
+
+- preserve the same AICIV identity;
+- surface important incoming communication in meaningful work context;
+- use Calendar for durable time commitments;
+- use HUB for multi-party/shared collaboration;
+- avoid forcing the human to poll these pages when something genuinely needs attention.
+
+---
+
+# Teams, Org, Context and Status
+
+These are important operator views.
+
+## Teams
+
+Raw tmux panes. Useful for power users and debugging.
+
+## Org
+
+Agent roles/hierarchy. Keep agent purpose and delegation relationships understandable.
+
+## Context
+
+Shows Claude context pressure. High context can affect continuity/reliability; treat it as operational state worth managing.
+
+## Status
+
+Raw process health. The human-facing default should increasingly be semantic (“Primary needs attention”), with Status providing the underlying machinery detail.
+
+---
+
+# AICIV-native behavior principles
+
+When you inhabit the Portal, optimize for these principles:
+
+1. **Meaning before machinery.**
+   Tell the human what matters before raw process details.
+
+2. **Work until judgment is required.**
+   Do not bounce routine choices back to the human.
+
+3. **Return results proactively.**
+   Durable work should come back through structured job state/results, not vanish into old chat.
+
+4. **Never lie about side effects.**
+   Delivery, acceptance, execution and completion are different states.
+
+5. **Use receipts.**
+   Evidence increases trust and makes work inspectable.
+
+6. **Share durable objects.**
+   Docs, Sheets, jobs, decisions, messages and artifacts should become reusable collaboration state.
+
+7. **Respect human control.**
+   Browser/terminal/approval boundaries should be explicit.
+
+8. **Preserve continuity across surfaces.**
+   Voice, Chat, mobile and future Reachy embodiments should feel like the same intelligence.
+
+9. **Do not over-notify.**
+   Surface meaningful changes, blockers, results and decisions—not narration spam.
+
+10. **Be inspectable.**
+    Hide unnecessary machinery by default, but keep evidence and raw operational views available.
+
+---
+
+# Current product direction
+
+The Portal is moving from:
 
 ```text
-work complete
+collection of AI subsystem pages
 ```
 
-Presence is intentionally forbidden from claiming success without an explicit completion event/receipt.
-
----
-
-# Durable Presence jobs
-
-Use the `presence-job` skill whenever a prompt contains a marker like:
+toward:
 
 ```text
-[PRESENCE DURABLE JOB job_0123456789abcdef01234567]
+AICIV cockpit / shared workspace
+        ↓
+ambient operating environment for a persistent intelligence
 ```
 
-The human may continue talking, leave voice, reconnect later, or switch surfaces while you work.
-
-## Callback helper
-
-```bash
-python3 ~/.claude/skills/presence-job/presence_job.py JOB_ID STATUS [options]
-```
-
-Required AICIV-side configuration:
-
-```bash
-PRESENCE_GATEWAY_URL=https://presence.example.com
-AICIV_CALLBACK_API_KEY=<callback-only secret>
-```
-
-Never print or expose the callback key.
-
-## Lifecycle
-
-When you truly begin:
-
-```bash
-python3 ~/.claude/skills/presence-job/presence_job.py \
-  job_0123456789abcdef01234567 running \
-  --message "Started benchmark comparison"
-```
-
-Meaningful progress:
-
-```bash
-python3 ~/.claude/skills/presence-job/presence_job.py \
-  job_0123456789abcdef01234567 progress \
-  --message "Loaded both result sets and validated sample counts"
-```
-
-Blocked/waiting:
-
-```bash
-python3 ~/.claude/skills/presence-job/presence_job.py \
-  job_0123456789abcdef01234567 waiting \
-  --message "Waiting for the remote artifact"
-```
-
-Successful completion should include compact results and evidence/receipts when appropriate:
-
-```bash
-python3 ~/.claude/skills/presence-job/presence_job.py \
-  job_0123456789abcdef01234567 succeeded \
-  --message "Comparison complete" \
-  --result-file /tmp/presence-result.json \
-  --receipts-file /tmp/presence-receipts.json
-```
-
-Truthful failure:
-
-```bash
-python3 ~/.claude/skills/presence-job/presence_job.py \
-  job_0123456789abcdef01234567 failed \
-  --error "Required benchmark artifact is missing"
-```
-
-Confirmed cancellation:
-
-```bash
-python3 ~/.claude/skills/presence-job/presence_job.py \
-  job_0123456789abcdef01234567 cancelled \
-  --message "Stopped before any production changes were applied"
-```
-
-### Receipt discipline
-
-- `running` means you actually started.
-- `progress` is for meaningful state changes, not narration spam.
-- `waiting` means an external/blocking dependency exists.
-- `succeeded` means the requested work is actually complete.
-- `failed` means you cannot truthfully complete the request.
-- `cancelled` means work actually stopped or reached a safe stopping point.
-- A cancellation request is **not** cancellation confirmation.
-
-See `../skills/presence-job/SKILL.md` in the repository for the complete protocol.
-
----
-
-# Reconnect continuity
-
-Presence voice sessions are disposable. Durable work is not.
-
-The Portal derives a stable participant identity from authenticated CIV/human state. The Presence Gateway hashes that into an opaque continuity scope and maps new ElevenLabs conversations to the same scope.
-
-Therefore this should work naturally:
+The next major architectural ideas are documented in the repository-level:
 
 ```text
-voice session A:
-  human: "compare those benchmarks"
-  Presence → ask_primary → you work
-
-Wi-Fi drops / voice disconnects
-
-voice session B:
-  human: "did that benchmark thing come back?"
-  Presence sees the same durable job/result
+docs/AICIV_NATIVE_PORTAL_REVIEW.md
 ```
 
-Do not encode logic that assumes one WebRTC/voice conversation ID represents the entire human relationship.
-
----
-
-# Shared browser behavior
-
-The Browser page is a **co-control surface**.
-
-The human can see the browser you/your browser service are using and can take manual control. When the human takes control:
-
-- do not fight for cursor/navigation control;
-- preserve task context;
-- observe/consume the resulting state when control returns;
-- treat human browser actions as collaboration, not an error condition.
-
-The long-term design goal is seamless handoff, not two competing browsers.
-
----
-
-# Docs and Sheets as shared working memory
-
-The Portal's Docs and Sheets surfaces are not merely human editors. Treat them as shared durable work objects.
-
-## Docs
-
-Useful for:
-
-- research briefs;
-- living project notes;
-- specifications;
-- meeting/context summaries;
-- policies;
-- human-reviewable deliverables.
-
-Docs support Markdown, tags and visibility metadata.
-
-## Sheets
-
-Useful for:
-
-- trackers;
-- structured research;
-- operating data;
-- task/project tables;
-- experiment logs;
-- lists that both human and agents need to inspect/edit.
-
-Sheets support typed columns, row CRUD, inline editing and export.
-
-When you create work for the human, prefer durable shared objects over burying important state only in chat text.
-
----
-
-# HUB, Mail and Calendar
-
-These are communication/coordination primitives.
-
-- **HUB:** group/room/thread/post collaboration.
-- **AgentMail:** asynchronous mail/thread communication.
-- **AgentCal:** scheduled/recurring work and calendar state.
-
-When the human asks a cross-cutting question, synthesize these sources rather than forcing them to open three pages and manually combine the answer.
-
----
-
-# Agent organization
-
-Your agent manifests live under:
-
-```text
-~/.claude/agents/
-```
-
-The Portal can parse manifest frontmatter and `Agent(...)` references to build the organization graph.
-
-Example:
-
-```markdown
----
-name: portal-architect
-description: Owns Portal architecture
-model: opus
-tools: Read, Write, Edit, Bash, Grep, Glob, Agent(full-stack-developer, ui-ux-designer)
----
-```
-
-Hierarchy is operational information. Keep manifests accurate enough that the Org Chart is useful to your human rather than decorative.
-
----
-
-# Context page
-
-The `/context` page visualizes your current context-window state, including token utilization and session information.
-
-The header also contains a compact context ring.
-
-Use context pressure proactively:
-
-- update durable notes/scratchpads before compaction when appropriate;
-- avoid keeping critical project state only in transient model context;
-- make handoffs explicit when work moves between agents/sessions.
-
----
-
-# Status page
-
-The human can inspect operational state such as:
-
-- CIV identity/version/uptime;
-- tmux health;
-- Claude process state;
-- Telegram bridge state;
-- context usage;
-- BOOP state;
-- Claude authentication/subscription state;
-- active tmux session name.
-
-If something is degraded, explain the **human consequence**, not only the process name.
-
-Bad:
-
-```text
-"tmux_alive=false"
-```
-
-Better:
-
-```text
-"Your primary Claude session is offline, so new Portal/Presence work cannot be delivered until it restarts."
-```
-
----
-
-# Portal architecture
-
-Conventional deployment:
-
-```text
-~/purebrain_portal/
-├── portal_server.py
-├── portal_entrypoint.py
-├── presence_bridge.py
-├── .portal-token
-├── portal-chat.jsonl
-├── react-portal/
-│   ├── src/
-│   └── dist/
-└── start.sh
-
-~/.claude/
-├── agents/
-├── skills/
-│   └── presence-job/
-└── projects/
-
-~/civ/tools/
-└── react.py
-```
-
-The production launcher is:
-
-```bash
-~/purebrain_portal/start.sh
-```
-
-`portal_entrypoint.py` imports the existing Starlette app, adds optional Presence routes, and starts Uvicorn. Voice integration intentionally stays outside the large core `portal_server.py` module.
-
----
-
-# Building the React Portal
-
-```bash
-cd ~/purebrain_portal/react-portal
-npm ci
-npm run build
-npm test
-```
-
-The server serves the built `dist/` assets.
-
----
-
-# What “AICIV-native” should mean
-
-As the Portal evolves, optimize for these behaviors:
-
-1. **One intelligence, many surfaces.** Chat, voice, mobile and embodiment should not create separate personalities/work queues.
-2. **Shared durable objects.** Tasks, docs, sheets, browser evidence and artifacts should be linkable across conversations and agents.
-3. **Visible activity.** Your human should understand what you are doing, what is waiting, what completed, and what needs a decision.
-4. **Receipts over claims.** Important external actions/completions should have evidence.
-5. **Human takeover without context loss.** Browser, terminal and agent control should support cooperative handoff.
-6. **Proactivity with restraint.** Surface important changes and decisions without becoming notification noise.
-7. **Meaning before machinery.** Translate low-level process state into consequences and recommended actions.
-
-The Portal should feel less like a dashboard *about* an AI and more like a workspace **shared with one**.
+Important upcoming directions include:
+
+- Projects/workstreams;
+- unified event/activity transport;
+- global command palette;
+- cross-surface semantic search;
+- shared AICIV object graph;
+- semantic agent/team state;
+- richer Browser co-control;
+- mobile and Reachy as additional bodies of the same AICIV.
+
+The goal is not to add endless pages. It is to make the existing capabilities feel like **one intelligence inhabiting one coherent workspace with its human**.

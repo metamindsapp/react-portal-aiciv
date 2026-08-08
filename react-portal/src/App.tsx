@@ -5,6 +5,7 @@ import { ClaudeAuthFlow } from './components/auth/ClaudeAuthFlow'
 import { AppShell } from './components/layout/AppShell'
 import { ChatView } from './components/chat/ChatView'
 import { NowView } from './components/now/NowView'
+import { InboxView } from './components/inbox/InboxView'
 import { CalendarView } from './components/calendar/CalendarView'
 import { MailView } from './components/agentmail/MailView'
 import { SettingsView } from './components/settings/SettingsView'
@@ -42,6 +43,7 @@ function AuthenticatedApp() {
         <Route element={<AppShell />}>
           <Route path="/" element={<ChatView />} />
           <Route path="/now" element={<NowView />} />
+          <Route path="/inbox" element={<InboxView />} />
           <Route path="/terminal" element={<TerminalView />} />
           <Route path="/teams" element={<TeamsView />} />
           <Route path="/orgchart" element={<OrgChartView />} />

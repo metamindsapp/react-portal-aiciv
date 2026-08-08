@@ -1,0 +1,329 @@
+.inbox-view {
+  height: 100%;
+  overflow-y: auto;
+  padding: 28px;
+  background:
+    radial-gradient(circle at 15% 0%, rgba(0, 206, 201, .08), transparent 28%),
+    radial-gradient(circle at 90% 10%, rgba(108, 92, 231, .09), transparent 30%),
+    var(--bg-primary);
+}
+
+.inbox-loading {
+  height: 100%;
+  display: grid;
+  place-items: center;
+}
+
+.inbox-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 24px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-md);
+}
+
+.inbox-hero > div { max-width: 780px; }
+.inbox-eyebrow {
+  color: var(--accent-secondary);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .12em;
+}
+.inbox-hero h2 {
+  margin-top: 6px;
+  font-size: clamp(25px, 3vw, 38px);
+  line-height: 1.1;
+}
+.inbox-hero p {
+  margin-top: 10px;
+  color: var(--text-secondary);
+  max-width: 700px;
+}
+.inbox-refresh {
+  padding: 9px 13px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  font-size: 12px;
+  font-weight: 700;
+}
+.inbox-refresh:disabled { opacity: .55; }
+
+.inbox-error {
+  margin-top: 12px;
+  padding: 10px 13px;
+  border: 1px solid var(--status-warning);
+  border-radius: var(--radius-md);
+  background: var(--status-warning-bg);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.inbox-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 18px 0 12px;
+}
+
+.inbox-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 750;
+}
+.inbox-tabs button.active {
+  border-color: var(--accent-primary);
+  background: var(--accent-primary-bg);
+  color: var(--accent-primary);
+}
+.inbox-tabs button span {
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+
+.inbox-list {
+  display: grid;
+  gap: 12px;
+  max-width: 980px;
+}
+
+.inbox-card {
+  position: relative;
+  padding: 18px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-sm);
+}
+
+.inbox-card-unseen {
+  border-color: rgba(108, 92, 231, .45);
+  box-shadow: inset 3px 0 0 var(--accent-primary), var(--shadow-sm);
+}
+
+.inbox-card-head,
+.inbox-card-title-wrap,
+.inbox-card-kicker,
+.inbox-card-actions,
+.inbox-card-meta {
+  display: flex;
+  align-items: center;
+}
+
+.inbox-card-head {
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+.inbox-card-title-wrap { align-items: flex-start; gap: 10px; }
+.inbox-card-title-wrap h3,
+.inbox-decision-card h3,
+.inbox-waiting-card h3 {
+  margin-top: 5px;
+  font-size: 15px;
+  line-height: 1.4;
+}
+.inbox-new-dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  box-shadow: var(--glow-accent);
+}
+.inbox-card-kicker { gap: 8px; color: var(--text-tertiary); font-size: 10px; }
+.inbox-status {
+  padding: 3px 7px;
+  border-radius: var(--radius-full);
+  background: var(--bg-tertiary);
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: 9px;
+}
+.inbox-status-succeeded { color: var(--status-success); background: var(--status-success-bg); }
+.inbox-status-failed { color: var(--status-error); background: var(--status-error-bg); }
+.inbox-status-cancelled { color: var(--text-tertiary); }
+.inbox-job-id {
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+
+.inbox-result-copy {
+  margin-top: 13px;
+  padding: 12px 13px;
+  max-height: 300px;
+  overflow: auto;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  white-space: pre-wrap;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.inbox-error-copy {
+  margin-top: 10px;
+  color: var(--status-error);
+  font-size: 12px;
+}
+
+.inbox-receipts { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+.inbox-receipts-label {
+  color: var(--text-tertiary);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.inbox-receipt { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 11px; }
+.inbox-receipt > span:first-child {
+  padding: 2px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+.inbox-receipt strong { font-weight: 600; color: var(--text-secondary); }
+.inbox-receipt code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-tertiary);
+  font-size: 9px;
+}
+
+.inbox-card-actions { gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.inbox-card-actions button,
+.inbox-card-actions a {
+  padding: 6px 9px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+}
+.inbox-card-actions a:hover { text-decoration: none; background: var(--bg-hover); }
+.inbox-card-actions button:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+.inbox-decision-card {
+  border-color: rgba(253, 203, 110, .34);
+  background: linear-gradient(140deg, rgba(253, 203, 110, .045), var(--surface-card) 35%);
+}
+.inbox-decision-label {
+  color: var(--status-warning);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .12em;
+}
+.inbox-decision-context,
+.inbox-waiting-card p {
+  margin-top: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.inbox-recommendation,
+.inbox-risk,
+.inbox-response-receipt {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.inbox-recommendation { display: flex; flex-direction: column; gap: 3px; }
+.inbox-recommendation strong { color: var(--accent-secondary); }
+.inbox-risk strong { color: var(--status-warning); }
+.inbox-response-receipt {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid rgba(0, 184, 148, .24);
+  background: var(--status-success-bg);
+}
+.inbox-response-receipt strong { color: var(--status-success); }
+.inbox-response-receipt span { color: var(--text-secondary); font-size: 10px; }
+
+.inbox-decision-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px;
+  margin-top: 13px;
+}
+.inbox-decision-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 11px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  text-align: left;
+}
+.inbox-decision-option:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+  background: var(--accent-primary-bg);
+}
+.inbox-decision-option strong { font-size: 12px; }
+.inbox-decision-option span { color: var(--text-secondary); font-size: 10px; line-height: 1.35; }
+.inbox-decision-option:disabled { opacity: .55; }
+.inbox-decision-note { width: 100%; margin-top: 9px; resize: vertical; }
+
+.inbox-card-meta {
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 13px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-tertiary);
+  font-size: 9px;
+}
+.inbox-card-meta span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inbox-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 30px 24px;
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-xl);
+  color: var(--text-secondary);
+}
+.inbox-empty strong { color: var(--text-primary); }
+
+@media (max-width: 720px) {
+  .inbox-view { padding: 14px 12px 90px; }
+  .inbox-hero { flex-direction: column; padding: 18px; }
+  .inbox-refresh { width: 100%; }
+  .inbox-tabs { overflow-x: auto; padding-bottom: 2px; }
+  .inbox-tabs button { flex: 0 0 auto; }
+  .inbox-card-head { flex-direction: column; }
+  .inbox-job-id { max-width: 100%; }
+  .inbox-decision-options { grid-template-columns: 1fr; }
+}

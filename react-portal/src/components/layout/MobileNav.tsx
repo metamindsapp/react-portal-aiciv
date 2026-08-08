@@ -7,11 +7,12 @@ import './MobileNav.css'
 const PRIMARY_ITEMS = [
   { to: '/now', icon: '\u{2728}', label: 'Now' },
   { to: '/', icon: '\u{1F4AC}', label: 'Chat' },
-  { to: '/calendar', icon: '\u{1F4C5}', label: 'Cal' },
+  { to: '/inbox', icon: '\u{1F4E5}', label: 'Inbox' },
   { to: '/mail', icon: '\u{1F4E8}', label: 'Mail' },
 ] as const
 
 const MORE_ITEMS = [
+  { to: '/calendar', icon: '\u{1F4C5}', label: 'Calendar' },
   { to: '/teams', icon: '\u{1F465}', label: 'Teams' },
   { to: '/docs', icon: '\u{1F4D6}', label: 'Docs' },
   { to: '/sheets', icon: '\u{1F4CA}', label: 'Sheets' },
