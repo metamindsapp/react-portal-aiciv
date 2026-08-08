@@ -8,6 +8,7 @@ dist/
 .aiciv-inbox-state.json
 .aiciv-projects.json
 .aiciv-collaboration-state.json
+.aiciv-evidence.json
 .env
 __pycache__/
 *.pyc
