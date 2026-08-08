@@ -5,6 +5,7 @@ import { MessageList } from './MessageList'
 import { ChatInput } from './ChatInput'
 import { SearchPanel } from './SearchPanel'
 import { ArtifactPanel } from './ArtifactPanel'
+import { VoicePresenceControl } from './VoicePresenceControl'
 import { LoadingSpinner } from '../common/LoadingSpinner'
 import { EmptyState } from '../common/EmptyState'
 import './ChatView.css'
@@ -67,16 +68,19 @@ export function ChatView() {
     <div className={`chat-view ${artifactOpen ? 'chat-with-artifact' : ''}`}>
       <div className="chat-main-area">
         <div className="chat-header-bar">
-          <button
-            className={`chat-search-toggle ${showSearch ? 'chat-search-toggle-active' : ''}`}
-            onClick={() => {
-              setShowSearch(v => !v)
-              if (showSearch) setSearchQuery('')
-            }}
-            title="Search messages"
-          >
-            {'\u{1F50D}'}
-          </button>
+          <div className="chat-header-actions">
+            <VoicePresenceControl />
+            <button
+              className={`chat-search-toggle ${showSearch ? 'chat-search-toggle-active' : ''}`}
+              onClick={() => {
+                setShowSearch(v => !v)
+                if (showSearch) setSearchQuery('')
+              }}
+              title="Search messages"
+            >
+              {'\u{1F50D}'}
+            </button>
+          </div>
         </div>
         {showSearch && (
           <SearchPanel
