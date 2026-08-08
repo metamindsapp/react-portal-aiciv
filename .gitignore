@@ -7,6 +7,7 @@ dist/
 .agentcal-fired-ids.json
 .aiciv-inbox-state.json
 .aiciv-projects.json
+.aiciv-collaboration-state.json
 .env
 __pycache__/
 *.pyc
