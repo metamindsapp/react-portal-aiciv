@@ -1,18 +1,9 @@
 #!/usr/bin/env python3
 """Server-shared collaboration state for Portal messages.
 
-The original Portal kept bookmarks in browser localStorage and displayed reaction
-state partly inside component-local React state. That makes those signals device
-local and invisible to the durable AICIV workspace.
-
-This extension owns only the collaboration annotations themselves:
-- shared message bookmarks / references;
-- lightweight per-message reaction summaries written through Portal;
-- migration-friendly metadata used by the React client.
-
-Authoritative conversation text remains owned by the existing Portal/Claude chat
-history. This module references messages by ID and stores bounded previews; it
-does not become a second chat database.
+This extension owns collaboration annotations (shared references and reaction
+summaries) while authoritative conversation text remains owned by Portal/Claude
+history. Changes emit canonical activity events for other AICIV client bodies.
 """
 
 from __future__ import annotations
@@ -28,6 +19,8 @@ from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
+
+from aiciv_activity import record_activity
 
 AuthChecker = Callable[[Request], bool]
 
@@ -48,8 +41,6 @@ def _safe_message_id(value: object) -> str | None:
 
 
 class CollaborationStore:
-    """Atomic JSON store for small cross-device collaboration annotations."""
-
     def __init__(self, path: Path):
         self.path = path
         self._lock = threading.Lock()
@@ -102,11 +93,7 @@ class CollaborationStore:
                 "savedAt": payload.get("savedAt") or _utc_now(),
             }
             if isinstance(payload.get("tags"), list):
-                bookmark["tags"] = [
-                    str(tag).strip()[:80]
-                    for tag in payload["tags"][:20]
-                    if str(tag).strip()
-                ]
+                bookmark["tags"] = [str(tag).strip()[:80] for tag in payload["tags"][:20] if str(tag).strip()]
             note = payload.get("note")
             if isinstance(note, str) and note.strip():
                 bookmark["note"] = note.strip()[:2000]
@@ -124,13 +111,6 @@ class CollaborationStore:
             return existed
 
     def set_reaction_summary(self, message_id: str, reactions: list[dict]) -> list[dict]:
-        """Store bounded reaction state when the frontend has an authoritative view.
-
-        This supplements the existing append-only sentiment log; it does not
-        replace it. The client can use this map to keep cross-device message
-        badges stable even when the old chat-history implementation does not
-        hydrate reaction aggregates itself.
-        """
         normalized: list[dict] = []
         for item in reactions[:40]:
             if not isinstance(item, dict):
@@ -162,11 +142,7 @@ def default_collaboration_store() -> CollaborationStore:
     return CollaborationStore(path)
 
 
-def build_collaboration_routes(
-    *,
-    check_auth: AuthChecker,
-    store: CollaborationStore | None = None,
-) -> list[Route]:
+def build_collaboration_routes(*, check_auth: AuthChecker, store: CollaborationStore | None = None) -> list[Route]:
     collaboration = store or default_collaboration_store()
 
     def require_auth(request: Request) -> JSONResponse | None:
@@ -178,16 +154,8 @@ def build_collaboration_routes(
         if (error := require_auth(request)):
             return error
         snapshot = collaboration.snapshot()
-        bookmarks = sorted(
-            snapshot["bookmarks"].values(),
-            key=lambda item: str(item.get("savedAt", "")),
-            reverse=True,
-        )
-        return JSONResponse({
-            "version": 1,
-            "bookmarks": bookmarks,
-            "reactions": snapshot["reactions"],
-        })
+        bookmarks = sorted(snapshot["bookmarks"].values(), key=lambda item: str(item.get("savedAt", "")), reverse=True)
+        return JSONResponse({"version": 1, "bookmarks": bookmarks, "reactions": snapshot["reactions"]})
 
     async def add_bookmark(request: Request) -> JSONResponse:
         if (error := require_auth(request)):
@@ -208,10 +176,15 @@ def build_collaboration_routes(
         if role not in ("user", "assistant"):
             return JSONResponse({"error": "invalid_role"}, status_code=400)
         bookmark = collaboration.put_bookmark(message_id, body)
-        return JSONResponse({
-            "bookmark": bookmark,
-            "semanticReceipt": "shared_reference_saved",
-        }, status_code=201)
+        record_activity(
+            kind="reference.saved",
+            object_kind="message",
+            object_id=message_id,
+            summary=f"Saved a shared reference from {role} conversation",
+            actor="human",
+            metadata={"role": role},
+        )
+        return JSONResponse({"bookmark": bookmark, "semanticReceipt": "shared_reference_saved"}, status_code=201)
 
     async def remove_bookmark(request: Request) -> JSONResponse:
         if (error := require_auth(request)):
@@ -220,6 +193,14 @@ def build_collaboration_routes(
         if not message_id:
             return JSONResponse({"error": "invalid_message_id"}, status_code=400)
         removed = collaboration.remove_bookmark(message_id)
+        if removed:
+            record_activity(
+                kind="reference.removed",
+                object_kind="message",
+                object_id=message_id,
+                summary="Removed a shared conversation reference",
+                actor="human",
+            )
         return JSONResponse({"msgId": message_id, "removed": removed})
 
     async def update_reactions(request: Request) -> JSONResponse:
@@ -236,6 +217,14 @@ def build_collaboration_routes(
         if not isinstance(reactions, list):
             return JSONResponse({"error": "invalid_reactions"}, status_code=400)
         normalized = collaboration.set_reaction_summary(message_id, reactions)
+        record_activity(
+            kind="reaction.changed",
+            object_kind="message",
+            object_id=message_id,
+            summary="Updated shared conversation reaction state",
+            actor="human",
+            metadata={"reactionCount": len(normalized)},
+        )
         return JSONResponse({"msgId": message_id, "reactions": normalized})
 
     return [
@@ -246,17 +235,8 @@ def build_collaboration_routes(
     ]
 
 
-def register_collaboration_routes(
-    app: Starlette,
-    *,
-    check_auth: AuthChecker,
-    store: CollaborationStore | None = None,
-) -> None:
-    existing_paths = {
-        getattr(route, "path", None)
-        for route in app.routes
-        if getattr(route, "path", None)
-    }
+def register_collaboration_routes(app: Starlette, *, check_auth: AuthChecker, store: CollaborationStore | None = None) -> None:
+    existing_paths = {getattr(route, "path", None) for route in app.routes if getattr(route, "path", None)}
     for route in build_collaboration_routes(check_auth=check_auth, store=store):
         if route.path not in existing_paths:
             app.router.routes.append(route)
