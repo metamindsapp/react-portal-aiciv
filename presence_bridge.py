@@ -2,8 +2,9 @@
 """Presence Gateway integration for the per-CIV React Portal.
 
 This module deliberately does *not* know how the Portal finds Claude/tmux
-sessions. Its job is narrower: expose a same-origin, Portal-authenticated route
-that mints a short-lived realtime voice token from the AICIV Presence Gateway.
+sessions. Its job is narrower: expose same-origin, Portal-authenticated Presence
+capabilities while keeping every long-lived Presence/provider credential on the
+server side.
 
 Trust boundary:
 
@@ -12,10 +13,11 @@ Trust boundary:
        │                       ├── holds PRESENCE_GATEWAY_API_KEY
        │                       ▼
        │                Presence Gateway
-       │                       │
-       │                       ├── holds ElevenLabs API key
-       │                       ▼
-       └──── short-lived token ─ ElevenLabs WebRTC
+       │                  │            │
+       │                  │            └── durable jobs / receipts
+       │                  └── holds ElevenLabs + OpenAI secrets
+       │
+       └──── short-lived WebRTC token / sanitized job state
 
 No ElevenLabs, OpenAI, Presence Gateway, or AICIV callback long-lived secret is
 returned to browser code.
@@ -25,11 +27,12 @@ from __future__ import annotations
 
 import math
 import os
+import re
 import threading
 import time
 from collections import deque
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 import httpx
 from starlette.applications import Starlette
@@ -41,6 +44,18 @@ from starlette.routing import Route
 AuthChecker = Callable[[Request], bool]
 HttpClientFactory = Callable[[], httpx.AsyncClient]
 Clock = Callable[[], float]
+
+_JOB_ID_RE = re.compile(r"^job_[a-f0-9]{24}$")
+_ALLOWED_JOB_STATUSES = {
+    "queued",
+    "accepted",
+    "running",
+    "waiting",
+    "cancel_requested",
+    "succeeded",
+    "failed",
+    "cancelled",
+}
 
 
 class PresenceBridgeConfig:
@@ -162,6 +177,27 @@ def _default_http_client_factory(timeout_seconds: float) -> HttpClientFactory:
     return lambda: httpx.AsyncClient(timeout=httpx.Timeout(timeout_seconds))
 
 
+def _gateway_headers(config: PresenceBridgeConfig) -> dict[str, str]:
+    return {
+        "Authorization": f"Bearer {config.gateway_api_key}",
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+
+
+def _stable_gateway_error(status_code: int) -> JSONResponse:
+    """Do not proxy upstream error bodies across the Portal trust boundary."""
+    if status_code == 404:
+        return JSONResponse({"error": "presence_job_not_found"}, status_code=404)
+    if status_code == 409:
+        return JSONResponse({"error": "presence_job_conflict"}, status_code=409)
+    if status_code in (401, 403):
+        # The browser is already Portal-authenticated. Upstream auth failure is a
+        # server configuration problem, not a second login challenge for users.
+        return JSONResponse({"error": "presence_gateway_auth_failed"}, status_code=502)
+    return JSONResponse({"error": "presence_gateway_unavailable"}, status_code=502)
+
+
 def build_presence_routes(
     *,
     check_auth: AuthChecker,
@@ -184,6 +220,13 @@ def build_presence_routes(
         bridge_config.token_window_seconds,
     )
 
+    def require_portal_auth(request: Request) -> JSONResponse | None:
+        if not check_auth(request):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        if not bridge_config.configured:
+            return JSONResponse({"error": "presence_not_configured"}, status_code=503)
+        return None
+
     async def presence_status(request: Request) -> JSONResponse:
         if not check_auth(request):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
@@ -196,17 +239,17 @@ def build_presence_routes(
                 # Useful client-facing capability data only. Never expose the
                 # gateway URL/key: the browser does not need either one.
                 "voice": {"available": bridge_config.configured},
+                "jobs": {"available": bridge_config.configured},
             }
         )
 
     async def presence_voice_token(request: Request) -> JSONResponse:
+        auth_error = require_portal_auth(request)
+        if auth_error:
+            return auth_error
+
         # Authentication happens before rate accounting: random unauthenticated
         # Internet traffic must not be able to exhaust a legitimate CIV's bucket.
-        if not check_auth(request):
-            return JSONResponse({"error": "unauthorized"}, status_code=401)
-        if not bridge_config.configured:
-            return JSONResponse({"error": "presence_not_configured"}, status_code=503)
-
         allowed, retry_after = limiter.consume()
         if not allowed:
             return JSONResponse(
@@ -223,22 +266,16 @@ def build_presence_routes(
             async with client_factory() as client:
                 response = await client.post(
                     f"{bridge_config.gateway_url}/v1/voice/token",
-                    headers={
-                        "Authorization": f"Bearer {bridge_config.gateway_api_key}",
-                        "Accept": "application/json",
-                        "Content-Type": "application/json",
-                    },
+                    headers=_gateway_headers(bridge_config),
                     json={"participantName": participant_name},
                 )
         except (httpx.TimeoutException, httpx.NetworkError):
             return JSONResponse({"error": "presence_gateway_unavailable"}, status_code=502)
         except Exception:
-            # Keep unexpected provider/client internals out of the browser.
             return JSONResponse({"error": "presence_gateway_error"}, status_code=502)
 
         if response.status_code < 200 or response.status_code >= 300:
-            # Do not proxy upstream bodies. They may contain diagnostic details
-            # that are useful in gateway logs but should not cross this boundary.
+            # Keep the old voice-specific stable error for client compatibility.
             return JSONResponse({"error": "voice_token_unavailable"}, status_code=502)
 
         try:
@@ -259,9 +296,121 @@ def build_presence_routes(
         # intentionally short-lived / session-scoped.
         return JSONResponse({"token": token, "conversationId": conversation_id})
 
+    async def presence_jobs(request: Request) -> JSONResponse:
+        """Expose recent durable Presence jobs as shared Portal work objects."""
+        auth_error = require_portal_auth(request)
+        if auth_error:
+            return auth_error
+
+        try:
+            limit = int(request.query_params.get("limit", "50"))
+        except ValueError:
+            limit = 50
+        limit = max(1, min(limit, 100))
+
+        params: dict[str, str] = {"limit": str(limit)}
+        status = request.query_params.get("status", "").strip()
+        if status:
+            if status not in _ALLOWED_JOB_STATUSES:
+                return JSONResponse({"error": "invalid_presence_job_status"}, status_code=400)
+            params["status"] = status
+
+        try:
+            async with client_factory() as client:
+                response = await client.get(
+                    f"{bridge_config.gateway_url}/v1/delegations",
+                    headers=_gateway_headers(bridge_config),
+                    params=params,
+                )
+        except (httpx.TimeoutException, httpx.NetworkError):
+            return JSONResponse({"error": "presence_gateway_unavailable"}, status_code=502)
+        except Exception:
+            return JSONResponse({"error": "presence_gateway_error"}, status_code=502)
+
+        if not (200 <= response.status_code < 300):
+            return _stable_gateway_error(response.status_code)
+
+        try:
+            payload = response.json()
+        except Exception:
+            return JSONResponse({"error": "invalid_presence_jobs_response"}, status_code=502)
+        if not isinstance(payload, dict) or not isinstance(payload.get("jobs"), list):
+            return JSONResponse({"error": "invalid_presence_jobs_response"}, status_code=502)
+
+        jobs = payload["jobs"][:limit]
+        return JSONResponse({"jobs": jobs, "count": len(jobs)})
+
+    async def presence_job(request: Request) -> JSONResponse:
+        """Read one authoritative durable job/result/receipt object."""
+        auth_error = require_portal_auth(request)
+        if auth_error:
+            return auth_error
+
+        job_id = request.path_params.get("job_id", "")
+        if not _JOB_ID_RE.fullmatch(job_id):
+            return JSONResponse({"error": "invalid_presence_job_id"}, status_code=400)
+
+        try:
+            async with client_factory() as client:
+                response = await client.get(
+                    f"{bridge_config.gateway_url}/v1/delegations/{job_id}",
+                    headers=_gateway_headers(bridge_config),
+                )
+        except (httpx.TimeoutException, httpx.NetworkError):
+            return JSONResponse({"error": "presence_gateway_unavailable"}, status_code=502)
+        except Exception:
+            return JSONResponse({"error": "presence_gateway_error"}, status_code=502)
+
+        if not (200 <= response.status_code < 300):
+            return _stable_gateway_error(response.status_code)
+
+        try:
+            payload = response.json()
+        except Exception:
+            return JSONResponse({"error": "invalid_presence_job_response"}, status_code=502)
+        if not isinstance(payload, dict) or not isinstance(payload.get("job"), dict):
+            return JSONResponse({"error": "invalid_presence_job_response"}, status_code=502)
+        return JSONResponse({"job": payload["job"]})
+
+    async def presence_cancel_job(request: Request) -> JSONResponse:
+        """Request cancellation without pretending cancellation is complete."""
+        auth_error = require_portal_auth(request)
+        if auth_error:
+            return auth_error
+
+        job_id = request.path_params.get("job_id", "")
+        if not _JOB_ID_RE.fullmatch(job_id):
+            return JSONResponse({"error": "invalid_presence_job_id"}, status_code=400)
+
+        try:
+            async with client_factory() as client:
+                response = await client.post(
+                    f"{bridge_config.gateway_url}/v1/delegations/{job_id}/cancel",
+                    headers=_gateway_headers(bridge_config),
+                    json={},
+                )
+        except (httpx.TimeoutException, httpx.NetworkError):
+            return JSONResponse({"error": "presence_gateway_unavailable"}, status_code=502)
+        except Exception:
+            return JSONResponse({"error": "presence_gateway_error"}, status_code=502)
+
+        if not (200 <= response.status_code < 300):
+            return _stable_gateway_error(response.status_code)
+
+        try:
+            payload = response.json()
+        except Exception:
+            return JSONResponse({"error": "invalid_presence_job_response"}, status_code=502)
+        if not isinstance(payload, dict) or not isinstance(payload.get("job"), dict):
+            return JSONResponse({"error": "invalid_presence_job_response"}, status_code=502)
+        return JSONResponse({"job": payload["job"]}, status_code=202)
+
     return [
         Route("/api/presence/status", endpoint=presence_status, methods=["GET"]),
         Route("/api/presence/voice/token", endpoint=presence_voice_token, methods=["POST"]),
+        Route("/api/presence/jobs", endpoint=presence_jobs, methods=["GET"]),
+        Route("/api/presence/jobs/{job_id}", endpoint=presence_job, methods=["GET"]),
+        Route("/api/presence/jobs/{job_id}/cancel", endpoint=presence_cancel_job, methods=["POST"]),
     ]
 
 
