@@ -4,11 +4,20 @@ import { AuthModal } from './AuthModal'
 import { FullPageSpinner } from '../common/LoadingSpinner'
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { authenticated, loading, checkAuth } = useAuthStore()
+  const authenticated = useAuthStore(s => s.authenticated)
+  const loading = useAuthStore(s => s.loading)
+  const checkAuth = useAuthStore(s => s.checkAuth)
+  const logout = useAuthStore(s => s.logout)
 
   useEffect(() => {
-    checkAuth()
+    void checkAuth()
   }, [checkAuth])
+
+  useEffect(() => {
+    const onExpired = () => logout()
+    window.addEventListener('aiciv:auth-expired', onExpired)
+    return () => window.removeEventListener('aiciv:auth-expired', onExpired)
+  }, [logout])
 
   if (loading) return <FullPageSpinner />
   if (!authenticated) return <AuthModal />

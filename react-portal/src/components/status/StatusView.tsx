@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
 import { apiGet } from '../../api/client'
+import { usePortalResource } from '../../hooks/usePortalResource'
 import { formatUptime } from '../../utils/time'
 import { LoadingSpinner } from '../common/LoadingSpinner'
 import './StatusView.css'
@@ -29,139 +29,84 @@ interface AuthStatus {
 }
 
 export function StatusView() {
-  const [status, setStatus] = useState<StatusData | null>(null)
-  const [boop, setBoop] = useState<BoopStatus | null>(null)
-  const [auth, setAuth] = useState<AuthStatus | null>(null)
-  const [loading, setLoading] = useState(true)
+  const statusResource = usePortalResource<StatusData>('status:primary', () => apiGet('/api/status'), { ttlMs: 5000, refreshMs: 15_000 })
+  const boopResource = usePortalResource<BoopStatus>('status:boop', () => apiGet('/api/boop-status'), { ttlMs: 5000, refreshMs: 15_000 })
+  const authResource = usePortalResource<AuthStatus>('status:claude-auth', () => apiGet('/api/auth/status'), { ttlMs: 5000, refreshMs: 15_000 })
 
-  const fetchAll = async () => {
-    try {
-      const [s, b, a] = await Promise.allSettled([
-        apiGet<StatusData>('/api/status'),
-        apiGet<BoopStatus>('/api/boop-status'),
-        apiGet<AuthStatus>('/api/auth/status'),
-      ])
-      if (s.status === 'fulfilled') setStatus(s.value)
-      if (b.status === 'fulfilled') setBoop(b.value)
-      if (a.status === 'fulfilled') setAuth(a.value)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const status = statusResource.data
+  const boop = boopResource.data
+  const auth = authResource.data
+  const loading = statusResource.loading && boopResource.loading && authResource.loading
 
-  useEffect(() => {
-    fetchAll()
-    const interval = setInterval(fetchAll, 15_000)
-    return () => clearInterval(interval)
-  }, [])
+  if (loading) return <div className="status-loading"><LoadingSpinner size={32} /></div>
 
-  if (loading) {
-    return <div className="status-loading"><LoadingSpinner size={32} /></div>
-  }
-
-  const indicator = (ok: boolean | undefined | null) =>
-    ok ? '\u{1F7E2}' : '\u{1F534}'
-
+  const indicator = (ok: boolean | undefined | null) => ok ? '\u{1F7E2}' : '\u{1F534}'
   const ctxPct = status?.ctx_pct ?? 0
+  const hasStaleError = Boolean(statusResource.error || boopResource.error || authResource.error)
 
   return (
     <div className="status-view">
-      <h2 className="status-title">Status Dashboard</h2>
+      <div className="status-title-row">
+        <div>
+          <h2 className="status-title">System Health</h2>
+          <p className="status-subtitle">Meaning first; diagnostics remain inspectable.</p>
+        </div>
+        <button
+          type="button"
+          className="status-refresh"
+          onClick={() => void Promise.allSettled([statusResource.refresh(), boopResource.refresh(), authResource.refresh()])}
+        >
+          Refresh
+        </button>
+      </div>
+      {hasStaleError && (
+        <div className="status-stale-warning" role="status">
+          One or more health sources could not refresh. Last known values remain visible; use the correlated error notice for diagnostics.
+        </div>
+      )}
       <div className="status-grid">
         <div className="status-card">
-          <h3 className="status-card-title">CIV Identity</h3>
+          <h3 className="status-card-title">Primary AICIV</h3>
           <div className="status-card-body">
-            <div className="status-row">
-              <span className="status-label">Name</span>
-              <span className="status-value">{status?.civ ?? '—'}</span>
-            </div>
-            <div className="status-row">
-              <span className="status-label">Uptime</span>
-              <span className="status-value">{status ? formatUptime(status.uptime) : '—'}</span>
-            </div>
-            <div className="status-row">
-              <span className="status-label">Version</span>
-              <span className="status-value">{status?.version ?? '—'}</span>
-            </div>
+            <div className="status-row"><span className="status-label">Name</span><span className="status-value">{status?.civ ?? '—'}</span></div>
+            <div className="status-row"><span className="status-label">Availability</span><span className="status-value">{indicator(status?.tmux_alive && status?.claude_running)} {status?.tmux_alive && status?.claude_running ? 'ready for work' : 'cannot accept normal work'}</span></div>
+            <div className="status-row"><span className="status-label">Uptime</span><span className="status-value">{status ? formatUptime(status.uptime) : '—'}</span></div>
+            <div className="status-row"><span className="status-label">Version</span><span className="status-value">{status?.version ?? '—'}</span></div>
           </div>
         </div>
 
         <div className="status-card">
-          <h3 className="status-card-title">Process Health</h3>
+          <h3 className="status-card-title">Runtime Detail</h3>
           <div className="status-card-body">
-            <div className="status-row">
-              <span className="status-label">tmux</span>
-              <span className="status-value">{indicator(status?.tmux_alive)} {status?.tmux_alive ? 'alive' : 'down'}</span>
-            </div>
-            <div className="status-row">
-              <span className="status-label">Claude</span>
-              <span className="status-value">{indicator(status?.claude_running)} {status?.claude_running ? 'running' : 'stopped'}</span>
-            </div>
-            <div className="status-row">
-              <span className="status-label">Telegram</span>
-              <span className="status-value">{indicator(status?.tg_bot_running)} {status?.tg_bot_running ? 'running' : 'stopped'}</span>
-            </div>
+            <div className="status-row"><span className="status-label">tmux</span><span className="status-value">{indicator(status?.tmux_alive)} {status?.tmux_alive ? 'alive' : 'down'}</span></div>
+            <div className="status-row"><span className="status-label">Claude</span><span className="status-value">{indicator(status?.claude_running)} {status?.claude_running ? 'running' : 'stopped'}</span></div>
+            <div className="status-row"><span className="status-label">Telegram</span><span className="status-value">{indicator(status?.tg_bot_running)} {status?.tg_bot_running ? 'running' : 'stopped'}</span></div>
+            <div className="status-row"><span className="status-label">tmux session</span><span className="status-value status-mono">{status?.tmux_session ?? '—'}</span></div>
           </div>
         </div>
 
         <div className="status-card">
           <h3 className="status-card-title">Context Window</h3>
           <div className="status-card-body">
-            <div className="status-ctx-bar">
-              <div className="status-ctx-fill" style={{ width: `${Math.min(ctxPct, 100)}%` }} />
-            </div>
-            <div className="status-row">
-              <span className="status-label">Usage</span>
-              <span className="status-value">{ctxPct > 0 ? `${ctxPct.toFixed(1)}%` : 'N/A'}</span>
-            </div>
+            <div className="status-ctx-bar"><div className="status-ctx-fill" style={{ width: `${Math.min(ctxPct, 100)}%` }} /></div>
+            <div className="status-row"><span className="status-label">Usage</span><span className="status-value">{ctxPct > 0 ? `${ctxPct.toFixed(1)}%` : 'N/A'}</span></div>
           </div>
         </div>
 
         <div className="status-card">
-          <h3 className="status-card-title">Boop Daemon</h3>
+          <h3 className="status-card-title">Background Work</h3>
           <div className="status-card-body">
-            <div className="status-row">
-              <span className="status-label">Status</span>
-              <span className="status-value">{indicator(boop?.running)} {boop?.running ? 'running' : 'stopped'}</span>
-            </div>
+            <div className="status-row"><span className="status-label">BOOP</span><span className="status-value">{indicator(boop?.running)} {boop?.running ? 'running' : 'stopped'}</span></div>
           </div>
         </div>
 
         <div className="status-card">
-          <h3 className="status-card-title">Claude Auth</h3>
+          <h3 className="status-card-title">Claude Account</h3>
           <div className="status-card-body">
-            <div className="status-row">
-              <span className="status-label">Status</span>
-              <span className="status-value">{auth ? (auth.authenticated ? '\uD83D\uDFE2 authenticated' : '\uD83D\uDD34 not authenticated') : '—'}</span>
-            </div>
-            {auth?.account && (
-              <div className="status-row">
-                <span className="status-label">Account</span>
-                <span className="status-value">{auth.account}</span>
-              </div>
-            )}
-            {auth?.subscription && (
-              <div className="status-row">
-                <span className="status-label">Subscription</span>
-                <span className="status-value">{auth.subscription}</span>
-              </div>
-            )}
-            {auth?.expires_at && (
-              <div className="status-row">
-                <span className="status-label">Expires</span>
-                <span className="status-value">{new Date(auth.expires_at).toLocaleString()}</span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="status-card">
-          <h3 className="status-card-title">Session</h3>
-          <div className="status-card-body">
-            <div className="status-row">
-              <span className="status-label">tmux session</span>
-              <span className="status-value status-mono">{status?.tmux_session ?? '—'}</span>
-            </div>
+            <div className="status-row"><span className="status-label">Status</span><span className="status-value">{auth ? (auth.authenticated ? '\uD83D\uDFE2 authenticated' : '\uD83D\uDD34 not authenticated') : '—'}</span></div>
+            {auth?.account && <div className="status-row"><span className="status-label">Account</span><span className="status-value">{auth.account}</span></div>}
+            {auth?.subscription && <div className="status-row"><span className="status-label">Subscription</span><span className="status-value">{auth.subscription}</span></div>}
+            {auth?.expires_at && <div className="status-row"><span className="status-label">Expires</span><span className="status-value">{new Date(auth.expires_at).toLocaleString()}</span></div>}
           </div>
         </div>
       </div>

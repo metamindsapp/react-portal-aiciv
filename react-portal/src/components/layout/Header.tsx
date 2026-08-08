@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from 'react'
 import { useIdentityStore } from '../../stores/identityStore'
+import { usePortalResource } from '../../hooks/usePortalResource'
 import { StatusBadge } from '../common/StatusBadge'
 import { CommandPalette } from '../command/CommandPalette'
 import { GlobalPresenceControl } from '../presence/GlobalPresenceControl'
@@ -23,9 +23,8 @@ function CtxRing({ pct }: { pct: number }) {
   const r = 12
   const circ = 2 * Math.PI * r
   const dash = (pct / 100) * circ
-
   return (
-    <svg className="header-ctx-ring" width="32" height="32" viewBox="0 0 32 32">
+    <svg className="header-ctx-ring" width="32" height="32" viewBox="0 0 32 32" aria-label={`Context ${Math.round(pct)} percent used`}>
       <circle cx="16" cy="16" r={r} fill="none" stroke="var(--bg-primary)" strokeWidth="3" />
       <circle
         cx="16" cy="16" r={r}
@@ -37,13 +36,7 @@ function CtxRing({ pct }: { pct: number }) {
         transform="rotate(-90 16 16)"
         style={{ transition: 'stroke-dasharray 0.6s ease, stroke 0.3s ease' }}
       />
-      <text
-        x="16" y="16"
-        textAnchor="middle"
-        dominantBaseline="central"
-        className="header-ctx-ring-text"
-        style={{ fill: ctxColor(pct) }}
-      >
+      <text x="16" y="16" textAnchor="middle" dominantBaseline="central" className="header-ctx-ring-text" style={{ fill: ctxColor(pct) }}>
         {Math.round(pct)}
       </text>
     </svg>
@@ -52,23 +45,11 @@ function CtxRing({ pct }: { pct: number }) {
 
 export function Header() {
   const { civName, status } = useIdentityStore()
-  const [ctx, setCtx] = useState<ContextSnapshot | null>(null)
-
-  const fetchCtx = useCallback(async () => {
-    try {
-      const data = await apiGet<ContextSnapshot>('/api/context')
-      setCtx(data)
-    } catch {
-      // Context is supporting telemetry; the rest of the shell stays usable.
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchCtx()
-    const interval = setInterval(fetchCtx, 30_000)
-    return () => clearInterval(interval)
-  }, [fetchCtx])
-
+  const { data: ctx } = usePortalResource<ContextSnapshot>(
+    'context-snapshot',
+    () => apiGet<ContextSnapshot>('/api/context'),
+    { ttlMs: 15_000, refreshMs: 30_000 },
+  )
   const claudeStatus = status?.claude_running ? 'online' : 'offline'
 
   return (
@@ -87,10 +68,7 @@ export function Header() {
             <CtxRing pct={ctx.pct} />
           </Link>
         )}
-        <StatusBadge
-          status={claudeStatus}
-          label={claudeStatus === 'online' ? 'Active' : 'Offline'}
-        />
+        <StatusBadge status={claudeStatus} label={claudeStatus === 'online' ? 'Active' : 'Offline'} />
       </div>
     </header>
   )

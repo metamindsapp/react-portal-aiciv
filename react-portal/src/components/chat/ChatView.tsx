@@ -14,6 +14,7 @@ export function ChatView() {
   const messages = useChatStore(s => s.messages)
   const loading = useChatStore(s => s.loading)
   const sending = useChatStore(s => s.sending)
+  const wsState = useChatStore(s => s.wsState)
   const focusMessageId = useChatStore(s => s.focusMessageId)
   const setFocusMessageId = useChatStore(s => s.setFocusMessageId)
   const loadHistory = useChatStore(s => s.loadHistory)
@@ -33,34 +34,22 @@ export function ChatView() {
     setArtifactOpen(true)
   }, [])
 
-  const handleCloseArtifact = useCallback(() => {
-    setArtifactOpen(false)
-  }, [])
-
   useEffect(() => {
-    loadHistory()
+    void loadHistory()
     connectWs()
     return () => disconnectWs()
   }, [loadHistory, connectWs, disconnectWs])
 
   const handleUpload = async (file: File) => {
-    try {
-      const res = await uploadFile(file)
-      if (res.ok) {
-        send(`[Uploaded file: ${res.filename}](${res.url})`)
-      }
-    } catch {
-      // Upload errors move into the shared Portal error surface in the reliability tranche.
-    }
+    const res = await uploadFile(file)
+    if (res.ok) void send(`[Uploaded file: ${res.filename}](${res.url})`)
   }
 
   const { matchCount, highlightIds } = useMemo(() => {
     const ids = new Set<string>()
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase()
-      for (const msg of messages) {
-        if (msg.text.toLowerCase().includes(q)) ids.add(msg.id)
-      }
+      for (const msg of messages) if (msg.text.toLowerCase().includes(q)) ids.add(msg.id)
     }
     if (focusMessageId) ids.add(focusMessageId)
     return { matchCount: searchQuery.trim() ? ids.size : 0, highlightIds: ids }
@@ -71,6 +60,10 @@ export function ChatView() {
       <div className="chat-main-area">
         <div className="chat-header-bar">
           <div className="chat-header-actions">
+            <span className={`chat-connection chat-connection-${wsState}`} title="Realtime chat transport state">
+              <span className="chat-connection-dot" />
+              {wsState === 'connected' ? 'Realtime' : wsState === 'reconnecting' ? 'Reconnecting' : wsState === 'connecting' ? 'Connecting' : wsState === 'unauthorized' ? 'Auth required' : 'Offline'}
+            </span>
             <span className="chat-header-hint">Live Presence is available globally in the Portal header.</span>
             <button
               className={`chat-search-toggle ${showSearch ? 'chat-search-toggle-active' : ''}`}
@@ -87,23 +80,12 @@ export function ChatView() {
         </div>
         <ConversationWorkRail />
         {showSearch && (
-          <SearchPanel
-            onSearch={setSearchQuery}
-            matchCount={matchCount}
-            onClose={() => { setShowSearch(false); setSearchQuery('') }}
-          />
+          <SearchPanel onSearch={setSearchQuery} matchCount={matchCount} onClose={() => { setShowSearch(false); setSearchQuery('') }} />
         )}
         {loading && messages.length === 0 ? (
-          <div className="chat-loading">
-            <LoadingSpinner size={32} />
-          </div>
+          <div className="chat-loading"><LoadingSpinner size={32} /></div>
         ) : messages.length === 0 ? (
-          <div className="chat-empty">
-            <EmptyState
-              title="No messages yet"
-              description="Send a message to start a conversation with your CIV"
-            />
-          </div>
+          <div className="chat-empty"><EmptyState title="No messages yet" description="Send a message to start a conversation with your CIV" /></div>
         ) : (
           <MessageList
             messages={messages}
@@ -116,13 +98,7 @@ export function ChatView() {
         )}
         <ChatInput onSend={send} onUpload={handleUpload} sending={sending} />
       </div>
-      {artifactOpen && (
-        <ArtifactPanel
-          content={artifactContent}
-          language={artifactLanguage}
-          onClose={handleCloseArtifact}
-        />
-      )}
+      {artifactOpen && <ArtifactPanel content={artifactContent} language={artifactLanguage} onClose={() => setArtifactOpen(false)} />}
     </div>
   )
 }
