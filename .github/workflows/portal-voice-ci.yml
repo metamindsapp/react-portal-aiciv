@@ -19,11 +19,8 @@ on:
       - "react-portal/**"
       - ".github/workflows/portal-voice-ci.yml"
 
-# TEMPORARY on this branch only: the frontend job commits the lockfile generated
-# from this same trusted, in-repository PR. This permission is removed as soon
-# as the lock lands; the permanent workflow returns to contents: read + npm ci.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   backend:
@@ -49,30 +46,17 @@ jobs:
         working-directory: react-portal
     steps:
       - uses: actions/checkout@v4
-        with:
-          # PR workflows normally check out a synthetic merge ref. For this one
-          # lock-refresh run we need the actual same-repo head branch so the bot
-          # can commit only the generated lock back to that branch.
-          ref: ${{ github.head_ref || github.ref_name }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install
-      - name: Commit refreshed package lock
-        if: github.event_name == 'pull_request'
-        env:
-          BRANCH: ${{ github.head_ref }}
-        run: |
-          if git diff --quiet -- package-lock.json; then
-            echo "package-lock.json is already current"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package-lock.json
-          git commit -m "chore: refresh frontend lockfile"
-          git push origin "HEAD:${BRANCH}"
+          cache: npm
+          cache-dependency-path: react-portal/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
       - name: Audit shipped production dependencies
+        # Dev/build tooling advisories remain visible in npm output, while
+        # high/critical vulnerabilities reachable from the production tree
+        # block client-facing releases.
         run: npm audit --omit=dev --audit-level=high
       - run: npm run build
       - run: npm test
