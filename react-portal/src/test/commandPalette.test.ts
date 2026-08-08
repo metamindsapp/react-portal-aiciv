@@ -3,12 +3,26 @@ import {
   docCommandEntries,
   jobCommandEntries,
   messageCommandEntries,
+  projectCommandEntries,
   rankCommandEntries,
   routeCommandEntries,
 } from '../search/commandPalette'
 import type { Doc } from '../types/docs'
 import type { ChatMessage } from '../types/chat'
 import type { PresenceJob } from '../types/presence'
+import type { AicivProject } from '../types/projects'
+
+const project: AicivProject = {
+  projectId: 'prj_0123456789abcdef01234567',
+  title: 'Presence Product',
+  goal: 'Ship a product-level voice system across Portal and Reachy',
+  summary: 'Build the shared Presence layer with durable cognition handoff.',
+  status: 'active',
+  tags: ['voice', 'reachy', 'product'],
+  links: [],
+  createdAt: '2026-08-08T11:00:00.000Z',
+  updatedAt: '2026-08-08T12:10:00.000Z',
+}
 
 const job: PresenceJob = {
   jobId: 'job_0123456789abcdef01234567',
@@ -45,6 +59,13 @@ describe('command palette index', () => {
     expect(ranked[0]?.route).toBe('/inbox')
   })
 
+  it('searches the exact AICIV project by goal, summary, tags, and status', () => {
+    const ranked = rankCommandEntries(projectCommandEntries([project]), 'reachy durable cognition')
+    expect(ranked).toHaveLength(1)
+    expect(ranked[0]?.kind).toBe('project')
+    expect(ranked[0]?.project?.projectId).toBe(project.projectId)
+  })
+
   it('searches durable jobs by goal/status/expected return', () => {
     const ranked = rankCommandEntries(jobCommandEntries([job]), 'voice latency evidence')
     expect(ranked).toHaveLength(1)
@@ -67,6 +88,7 @@ describe('command palette index', () => {
 
   it('requires every query token to match somewhere in the same object', () => {
     const entries = [
+      ...projectCommandEntries([project]),
       ...docCommandEntries([doc]),
       ...jobCommandEntries([job]),
     ]

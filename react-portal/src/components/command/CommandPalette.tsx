@@ -3,16 +3,19 @@ import { useNavigate } from 'react-router-dom'
 import { fetchChatHistory, sendChatMessage } from '../../api/chat'
 import { fetchDocs } from '../../api/docs'
 import { fetchPresenceJobs } from '../../api/presence'
+import { fetchAicivProjects } from '../../api/projects'
 import {
   docCommandEntries,
   jobCommandEntries,
   messageCommandEntries,
+  projectCommandEntries,
   rankCommandEntries,
   routeCommandEntries,
   type CommandEntry,
 } from '../../search/commandPalette'
 import { useChatStore } from '../../stores/chatStore'
 import { useDocsStore } from '../../stores/docsStore'
+import { useProjectsStore } from '../../stores/projectsStore'
 import './CommandPalette.css'
 
 type Selectable =
@@ -24,6 +27,7 @@ const TERMINAL_JOB_STATUSES = new Set(['succeeded', 'failed', 'cancelled'])
 function entryIcon(kind: CommandEntry['kind']): string {
   switch (kind) {
     case 'route': return '↗'
+    case 'project': return '◆'
     case 'job': return '◉'
     case 'doc': return '▤'
     case 'message': return '◌'
@@ -33,6 +37,7 @@ function entryIcon(kind: CommandEntry['kind']): string {
 function entryKindLabel(kind: CommandEntry['kind']): string {
   switch (kind) {
     case 'route': return 'Portal'
+    case 'project': return 'Project'
     case 'job': return 'Durable work'
     case 'doc': return 'Doc'
     case 'message': return 'Conversation'
@@ -58,7 +63,8 @@ export function CommandPalette() {
     setLoading(true)
     setSourceWarning(null)
 
-    const [jobsResult, docsResult, chatResult] = await Promise.allSettled([
+    const [projectsResult, jobsResult, docsResult, chatResult] = await Promise.allSettled([
+      fetchAicivProjects(),
       fetchPresenceJobs(75),
       fetchDocs(),
       fetchChatHistory(200),
@@ -66,6 +72,12 @@ export function CommandPalette() {
 
     const next: CommandEntry[] = []
     const unavailable: string[] = []
+
+    if (projectsResult.status === 'fulfilled') {
+      next.push(...projectCommandEntries(projectsResult.value.projects || []))
+    } else {
+      unavailable.push('Projects')
+    }
 
     if (jobsResult.status === 'fulfilled') {
       next.push(...jobCommandEntries(jobsResult.value.jobs || []))
@@ -168,6 +180,12 @@ export function CommandPalette() {
     switch (entry.kind) {
       case 'route':
         if (entry.route) navigate(entry.route)
+        break
+      case 'project':
+        if (entry.project) {
+          useProjectsStore.getState().selectProject(entry.project.projectId)
+          navigate('/projects')
+        }
         break
       case 'doc':
         if (entry.doc) {

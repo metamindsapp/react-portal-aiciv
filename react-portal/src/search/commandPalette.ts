@@ -1,8 +1,9 @@
 import type { Doc } from '../types/docs'
 import type { ChatMessage } from '../types/chat'
 import type { PresenceJob } from '../types/presence'
+import type { AicivProject } from '../types/projects'
 
-export type CommandEntryKind = 'route' | 'job' | 'doc' | 'message'
+export type CommandEntryKind = 'route' | 'project' | 'job' | 'doc' | 'message'
 
 export interface CommandEntry {
   id: string
@@ -11,6 +12,7 @@ export interface CommandEntry {
   subtitle: string
   keywords: string
   route?: string
+  project?: AicivProject
   doc?: Doc
   messageId?: string
   job?: PresenceJob
@@ -25,6 +27,7 @@ const ROUTES: Array<{
   { route: '/now', title: 'AICIV Now', subtitle: 'Current work, health, results and activity', keywords: 'home current status work activity cockpit' },
   { route: '/inbox', title: 'AICIV Inbox', subtitle: 'Needs You, Results and Archive', keywords: 'decisions approvals results returned work needs you' },
   { route: '/', title: 'Conversation', subtitle: 'Chat with your primary AICIV', keywords: 'chat talk message conversation primary' },
+  { route: '/projects', title: 'Projects', subtitle: 'Shared AICIV workstreams and object relationships', keywords: 'projects workstreams goals linked objects jobs docs context' },
   { route: '/teams', title: 'Teams', subtitle: 'Live agent/tmux panes', keywords: 'agents panes team workers tmux' },
   { route: '/calendar', title: 'Calendar', subtitle: 'Scheduled and recurring work', keywords: 'agentcal schedule tasks recurring events' },
   { route: '/mail', title: 'Mail', subtitle: 'AgentMail inbox, sent and threads', keywords: 'email messages inbox agentmail' },
@@ -55,6 +58,17 @@ export function routeCommandEntries(): CommandEntry[] {
     subtitle: item.subtitle,
     keywords: `${item.title} ${item.subtitle} ${item.keywords}`,
     route: item.route,
+  }))
+}
+
+export function projectCommandEntries(projects: AicivProject[]): CommandEntry[] {
+  return projects.map(project => ({
+    id: `project:${project.projectId}`,
+    kind: 'project',
+    title: project.title,
+    subtitle: `Project · ${project.status} · ${project.links.length} linked object${project.links.length === 1 ? '' : 's'}`,
+    keywords: `${project.title} ${project.goal} ${project.summary} ${project.tags.join(' ')} ${project.status}`,
+    project,
   }))
 }
 
@@ -118,7 +132,7 @@ function scoreEntry(entry: CommandEntry, query: string): number {
     else score += 2
   }
 
-  // Prefer actionable/shared objects over conversation snippets for ties.
+  if (entry.kind === 'project') score += 7
   if (entry.kind === 'job') score += 5
   if (entry.kind === 'doc') score += 3
   if (entry.kind === 'route') score += 2

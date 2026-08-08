@@ -6,6 +6,7 @@ import { AppShell } from './components/layout/AppShell'
 import { ChatView } from './components/chat/ChatView'
 import { NowView } from './components/now/NowView'
 import { InboxView } from './components/inbox/InboxView'
+import { ProjectsView } from './components/projects/ProjectsView'
 import { CalendarView } from './components/calendar/CalendarView'
 import { MailView } from './components/agentmail/MailView'
 import { SettingsView } from './components/settings/SettingsView'
@@ -24,7 +25,6 @@ import { TgimView } from './components/tgim/TgimView'
 import { useIdentityStore } from './stores/identityStore'
 import { useSettingsStore } from './stores/settingsStore'
 
-/** Runs identity + status fetches only after auth succeeds */
 function AuthenticatedApp() {
   const fetchIdentity = useIdentityStore(s => s.fetchIdentity)
   const fetchStatusInfo = useIdentityStore(s => s.fetchStatusInfo)
@@ -44,6 +44,7 @@ function AuthenticatedApp() {
           <Route path="/" element={<ChatView />} />
           <Route path="/now" element={<NowView />} />
           <Route path="/inbox" element={<InboxView />} />
+          <Route path="/projects" element={<ProjectsView />} />
           <Route path="/terminal" element={<TerminalView />} />
           <Route path="/teams" element={<TeamsView />} />
           <Route path="/orgchart" element={<OrgChartView />} />

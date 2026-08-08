@@ -12,6 +12,7 @@ const PRIMARY_ITEMS = [
 ] as const
 
 const MORE_ITEMS = [
+  { to: '/projects', icon: '\u{1F5C2}\u{FE0F}', label: 'Projects' },
   { to: '/calendar', icon: '\u{1F4C5}', label: 'Calendar' },
   { to: '/teams', icon: '\u{1F465}', label: 'Teams' },
   { to: '/docs', icon: '\u{1F4D6}', label: 'Docs' },
