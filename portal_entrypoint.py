@@ -21,6 +21,7 @@ import uvicorn
 import portal_server
 from aiciv_collaboration import register_collaboration_routes
 from aiciv_evidence import register_evidence_routes
+from aiciv_http import install_http_boundary
 from aiciv_inbox import register_aiciv_inbox_routes
 from aiciv_projects import register_aiciv_project_routes
 from presence_bridge import register_presence_routes
@@ -48,6 +49,7 @@ register_evidence_routes(
     portal_server.app,
     check_auth=portal_server.check_auth,
 )
+install_http_boundary(portal_server.app)
 
 
 def _handle_sigterm(signum, frame):
@@ -61,8 +63,6 @@ def main() -> None:
 
     port = int(os.environ.get("PORT", 8097))
     print(f"[portal] Starting PureBrain Portal + AICIV extensions on port {port}")
-    # Never print Presence Gateway credentials here. The existing Portal bearer
-    # behavior remains owned by portal_server.py.
     uvicorn.run(portal_server.app, host="0.0.0.0", port=port, log_level="info")
 
 
