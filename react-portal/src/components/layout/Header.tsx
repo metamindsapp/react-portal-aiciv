@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useIdentityStore } from '../../stores/identityStore'
 import { StatusBadge } from '../common/StatusBadge'
+import { GlobalPresenceControl } from '../presence/GlobalPresenceControl'
 import { apiGet } from '../../api/client'
 import { Link } from 'react-router-dom'
 import './Header.css'
@@ -58,7 +59,7 @@ export function Header() {
       const data = await apiGet<ContextSnapshot>('/api/context')
       setCtx(data)
     } catch {
-      // silent
+      // Context is supporting telemetry; the rest of the shell stays usable.
     }
   }, [])
 
@@ -73,12 +74,13 @@ export function Header() {
   return (
     <header className="header">
       <div className="header-left">
-        <a href="https://ai-civ.com" target="_blank" rel="noopener noreferrer" className="header-brand-link">
+        <Link to="/now" className="header-brand-link" title="Open AICIV Now">
           <h1 className="header-title">{civName || 'AiCIV'}</h1>
-        </a>
+        </Link>
         <span className="header-subtitle">Portal</span>
       </div>
       <div className="header-right">
+        <GlobalPresenceControl />
         {ctx != null && (
           <Link to="/context" className="header-ctx-link" title="Context window — click for details">
             <CtxRing pct={ctx.pct} />
