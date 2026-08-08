@@ -58,7 +58,7 @@ class AicivInboxTests(unittest.TestCase):
         self.assertEqual(restored.status_code, 200)
         self.assertNotIn("archivedAt", restored.json()["state"])
 
-    def test_decision_response_records_delivery_semantics_not_execution(self):
+    def test_decision_response_is_only_an_annotation_receipt(self):
         response = self.client.post(
             f"/api/aiciv/inbox/{JOB_ID}/decisions/dec_provider/respond",
             headers=self.headers,
@@ -73,9 +73,10 @@ class AicivInboxTests(unittest.TestCase):
         self.assertEqual(payload["response"]["optionId"], "option_b")
         self.assertEqual(
             payload["semanticReceipt"],
-            "response_recorded_after_portal_delivery_not_execution",
+            "inbox_annotation_recorded_not_delivery_or_execution",
         )
         self.assertNotIn("executed", payload)
+        self.assertNotIn("delivered", payload)
 
         state = self.store.snapshot()
         recorded = state["jobs"][JOB_ID]["decisionResponses"]["dec_provider"]
