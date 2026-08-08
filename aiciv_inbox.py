@@ -3,7 +3,7 @@
 
 Presence owns authoritative durable job state. This module stores only the
 human-facing collaboration state that should survive browser/device changes:
-seen/archived markers and decision responses that were sent back to the AICIV.
+seen/archived markers and decision responses selected by the human.
 
 It deliberately does not duplicate job results, receipts, or task status.
 """
@@ -91,7 +91,8 @@ class AicivInboxStore:
             job = self._job_state(state, job_id)
             if archived:
                 job["archivedAt"] = _utc_now()
-                job.setdefault("seenAt", _utc_now())
+                if "seenAt" not in job:
+                    job["seenAt"] = _utc_now()
             else:
                 job.pop("archivedAt", None)
             self._write_unlocked(state)
@@ -118,7 +119,8 @@ class AicivInboxStore:
             if message:
                 response["message"] = message
             responses[decision_id] = response
-            job.setdefault("seenAt", _utc_now())
+            if "seenAt" not in job:
+                job["seenAt"] = _utc_now()
             self._write_unlocked(state)
             return response.copy()
 
@@ -220,7 +222,10 @@ def build_aiciv_inbox_routes(
             "jobId": job_id,
             "decisionId": decision_id,
             "response": response,
-            "semanticReceipt": "response_recorded_after_portal_delivery_not_execution",
+            # This endpoint stores collaboration state only. The frontend writes
+            # this annotation after /api/chat/send reports delivery, but callers
+            # of this endpoint directly must not infer AICIV delivery/execution.
+            "semanticReceipt": "inbox_annotation_recorded_not_delivery_or_execution",
         })
 
     return [
