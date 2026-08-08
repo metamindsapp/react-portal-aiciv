@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useChatStore } from '../../stores/chatStore'
 import { uploadFile } from '../../api/client'
+import { ConversationWorkRail } from './ConversationWorkRail'
 import { MessageList } from './MessageList'
 import { ChatInput } from './ChatInput'
 import { SearchPanel } from './SearchPanel'
@@ -49,7 +50,7 @@ export function ChatView() {
         send(`[Uploaded file: ${res.filename}](${res.url})`)
       }
     } catch {
-      // Upload errors will move into the shared Portal error surface in a later tranche.
+      // Upload errors move into the shared Portal error surface in the reliability tranche.
     }
   }
 
@@ -84,6 +85,7 @@ export function ChatView() {
             </button>
           </div>
         </div>
+        <ConversationWorkRail />
         {showSearch && (
           <SearchPanel
             onSearch={setSearchQuery}
