@@ -8,7 +8,7 @@ server side.
 
 Trust boundary:
 
-    Browser ──Portal bearer──▶ Portal
+    Browser ──Portal session──▶ Portal
        │                       │
        │                       ├── holds PRESENCE_GATEWAY_API_KEY
        │                       ▼
@@ -19,8 +19,8 @@ Trust boundary:
        │
        └──── short-lived WebRTC token / sanitized job state
 
-No ElevenLabs, OpenAI, Presence Gateway, or AICIV callback long-lived secret is
-returned to browser code.
+No ElevenLabs, OpenAI, Presence Gateway, Portal bootstrap bearer, or AICIV
+callback long-lived secret is returned to browser code.
 """
 
 from __future__ import annotations
@@ -83,7 +83,7 @@ class PresenceBridgeConfig:
 class SlidingWindowLimiter:
     """Small process-local limiter for expensive credential mint operations.
 
-    Portal currently has one bearer-authenticated human surface per CIV, so a
+    Portal currently has one authenticated human surface per CIV, so a
     per-process bucket is the correct first boundary: it catches accidental
     reconnect storms and malicious browser loops without trusting spoofable
     forwarded-IP headers. Fleet/tenant-wide quotas belong at the Presence
@@ -192,8 +192,6 @@ def _stable_gateway_error(status_code: int) -> JSONResponse:
     if status_code == 409:
         return JSONResponse({"error": "presence_job_conflict"}, status_code=409)
     if status_code in (401, 403):
-        # The browser is already Portal-authenticated. Upstream auth failure is a
-        # server configuration problem, not a second login challenge for users.
         return JSONResponse({"error": "presence_gateway_auth_failed"}, status_code=502)
     return JSONResponse({"error": "presence_gateway_unavailable"}, status_code=502)
 
@@ -207,11 +205,7 @@ def build_presence_routes(
     http_client_factory: HttpClientFactory | None = None,
     token_limiter: SlidingWindowLimiter | None = None,
 ) -> list[Route]:
-    """Build isolated Presence routes for registration on an existing Portal app.
-
-    Dependency injection for config/client/limiter makes this boundary
-    deterministic in tests and prevents CI from making network calls.
-    """
+    """Build isolated Presence routes for registration on an existing Portal app."""
 
     bridge_config = config or load_presence_bridge_config()
     client_factory = http_client_factory or _default_http_client_factory(bridge_config.timeout_seconds)
@@ -236,8 +230,6 @@ def build_presence_routes(
                 "configured": bridge_config.configured,
                 "surface": "portal",
                 "civ": civ_name,
-                # Useful client-facing capability data only. Never expose the
-                # gateway URL/key: the browser does not need either one.
                 "voice": {"available": bridge_config.configured},
                 "jobs": {"available": bridge_config.configured},
             }
@@ -248,8 +240,6 @@ def build_presence_routes(
         if auth_error:
             return auth_error
 
-        # Authentication happens before rate accounting: random unauthenticated
-        # Internet traffic must not be able to exhaust a legitimate CIV's bucket.
         allowed, retry_after = limiter.consume()
         if not allowed:
             return JSONResponse(
@@ -258,16 +248,23 @@ def build_presence_routes(
                 headers={"Retry-After": str(retry_after)},
             )
 
-        # Identity metadata is derived only from authenticated Portal state.
-        # Browser-supplied participant labels are intentionally ignored.
+        # All identity metadata is derived from authenticated Portal state. The
+        # participant label identifies this realtime body/session; continuity_key
+        # deliberately excludes the surface so Portal/phone/Reachy/watch can map
+        # to one durable human↔AICIV relationship in Presence.
         participant_name = f"{civ_name}:{human_name}:portal"[:160]
+        continuity_key = f"{civ_name}:{human_name}"[:300]
 
         try:
             async with client_factory() as client:
                 response = await client.post(
                     f"{bridge_config.gateway_url}/v1/voice/token",
                     headers=_gateway_headers(bridge_config),
-                    json={"participantName": participant_name},
+                    json={
+                        "participantName": participant_name,
+                        "continuityKey": continuity_key,
+                        "surface": "portal",
+                    },
                 )
         except (httpx.TimeoutException, httpx.NetworkError):
             return JSONResponse({"error": "presence_gateway_unavailable"}, status_code=502)
@@ -275,7 +272,6 @@ def build_presence_routes(
             return JSONResponse({"error": "presence_gateway_error"}, status_code=502)
 
         if response.status_code < 200 or response.status_code >= 300:
-            # Keep the old voice-specific stable error for client compatibility.
             return JSONResponse({"error": "voice_token_unavailable"}, status_code=502)
 
         try:
@@ -292,8 +288,6 @@ def build_presence_routes(
         if not isinstance(conversation_id, str) or not conversation_id:
             return JSONResponse({"error": "invalid_voice_token_response"}, status_code=502)
 
-        # This is the only voice credential the browser receives, and it is
-        # intentionally short-lived / session-scoped.
         return JSONResponse({"token": token, "conversationId": conversation_id})
 
     async def presence_jobs(request: Request) -> JSONResponse:

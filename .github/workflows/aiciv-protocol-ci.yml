@@ -1,0 +1,49 @@
+name: AICIV Protocol CI
+
+on:
+  pull_request:
+    paths:
+      - "aiciv_activity.py"
+      - "aiciv_protocol.py"
+      - "aiciv_collaboration.py"
+      - "aiciv_evidence.py"
+      - "portal_entrypoint.py"
+      - "presence_bridge.py"
+      - "test_aiciv_activity.py"
+      - "test_aiciv_protocol.py"
+      - ".github/workflows/aiciv-protocol-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "aiciv_activity.py"
+      - "aiciv_protocol.py"
+      - "aiciv_collaboration.py"
+      - "aiciv_evidence.py"
+      - "portal_entrypoint.py"
+      - "presence_bridge.py"
+      - "test_aiciv_activity.py"
+      - "test_aiciv_protocol.py"
+      - ".github/workflows/aiciv-protocol-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  protocol:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install focused test dependencies
+        run: pip install starlette httpx
+      - name: Compile canonical protocol modules
+        run: python -m py_compile aiciv_activity.py aiciv_protocol.py aiciv_collaboration.py aiciv_evidence.py portal_entrypoint.py presence_bridge.py
+      - name: Test activity feed
+        run: python test_aiciv_activity.py
+      - name: Test canonical object graph and client manifest
+        run: python test_aiciv_protocol.py
+      - name: Re-run Presence bridge contract
+        run: python test_presence_bridge.py

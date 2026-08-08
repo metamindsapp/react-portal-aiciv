@@ -20,43 +20,27 @@ class FakeAsyncClient:
         self.error = error
         self.requests: list[dict[str, Any]] = []
 
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, exc_type, exc, tb):
-        return False
+    async def __aenter__(self): return self
+    async def __aexit__(self, exc_type, exc, tb): return False
 
     def _respond(self):
-        if self.error:
-            raise self.error
-        if self.response is None:
-            raise RuntimeError("fake client has no response")
+        if self.error: raise self.error
+        if self.response is None: raise RuntimeError("fake client has no response")
         return self.response
 
     async def post(self, url: str, *, headers: dict[str, str], json: dict[str, Any]):
         self.requests.append({"method": "POST", "url": url, "headers": headers, "json": json})
         return self._respond()
 
-    async def get(
-        self,
-        url: str,
-        *,
-        headers: dict[str, str],
-        params: dict[str, str] | None = None,
-    ):
+    async def get(self, url: str, *, headers: dict[str, str], params: dict[str, str] | None = None):
         self.requests.append({"method": "GET", "url": url, "headers": headers, "params": params or {}})
         return self._respond()
 
 
 class FakeClock:
-    def __init__(self, start: float = 1000.0):
-        self.now = start
-
-    def __call__(self) -> float:
-        return self.now
-
-    def advance(self, seconds: float) -> None:
-        self.now += seconds
+    def __init__(self, start: float = 1000.0): self.now = start
+    def __call__(self) -> float: return self.now
+    def advance(self, seconds: float) -> None: self.now += seconds
 
 
 class PresenceBridgeTests(unittest.TestCase):
@@ -87,8 +71,6 @@ class PresenceBridgeTests(unittest.TestCase):
             http_client_factory=lambda: fake_http,
             token_limiter=token_limiter,
         )
-        # Double registration must remain a no-op; wrapper imports/reloads should
-        # never create duplicate matching routes.
         register_presence_routes(
             app,
             check_auth=check_auth,
@@ -107,7 +89,6 @@ class PresenceBridgeTests(unittest.TestCase):
     def test_status_requires_portal_auth_and_never_returns_gateway_secret(self):
         client, _ = self.build_client()
         self.assertEqual(client.get("/api/presence/status").status_code, 401)
-
         response = client.get("/api/presence/status", headers=self.auth_headers())
         self.assertEqual(response.status_code, 200)
         payload = response.json()
@@ -118,45 +99,43 @@ class PresenceBridgeTests(unittest.TestCase):
         self.assertNotIn("gateway-super-secret", encoded)
         self.assertNotIn("presence.internal.example", encoded)
 
-    def test_token_route_proxies_only_server_side_gateway_auth(self):
-        upstream = httpx.Response(
-            200,
-            json={"token": "short-lived-conversation-token", "conversationId": "conv_123"},
-        )
+    def test_token_route_sends_surface_and_stable_relationship_continuity(self):
+        upstream = httpx.Response(200, json={"token": "short-lived-conversation-token", "conversationId": "conv_123"})
         client, fake_http = self.build_client(upstream_response=upstream)
 
         response = client.post("/api/presence/voice/token", headers=self.auth_headers(), json={})
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            response.json(),
-            {"token": "short-lived-conversation-token", "conversationId": "conv_123"},
-        )
+        self.assertEqual(response.json(), {"token": "short-lived-conversation-token", "conversationId": "conv_123"})
         self.assertEqual(len(fake_http.requests), 1)
         sent = fake_http.requests[0]
         self.assertEqual(sent["url"], "https://presence.internal.example/v1/voice/token")
-        self.assertEqual(
-            sent["headers"]["Authorization"],
-            "Bearer gateway-super-secret-do-not-leak",
-        )
-        self.assertEqual(sent["json"]["participantName"], "synth:Corey:portal")
-
-        # Long-lived gateway auth must never appear in the response body.
+        self.assertEqual(sent["headers"]["Authorization"], "Bearer gateway-super-secret-do-not-leak")
+        self.assertEqual(sent["json"], {
+            "participantName": "synth:Corey:portal",
+            "continuityKey": "synth:Corey",
+            "surface": "portal",
+        })
         self.assertNotIn("gateway-super-secret", response.text)
 
-    def test_browser_participant_label_is_ignored_in_favor_of_portal_identity(self):
-        upstream = httpx.Response(
-            200,
-            json={"token": "voice-token", "conversationId": "conv_custom"},
-        )
+    def test_browser_identity_metadata_is_ignored_in_favor_of_authenticated_portal_state(self):
+        upstream = httpx.Response(200, json={"token": "voice-token", "conversationId": "conv_custom"})
         client, fake_http = self.build_client(upstream_response=upstream)
 
         response = client.post(
             "/api/presence/voice/token",
             headers=self.auth_headers(),
-            json={"participantName": "I-am-definitely-someone-else"},
+            json={
+                "participantName": "I-am-definitely-someone-else",
+                "continuityKey": "other-human:other-civ",
+                "surface": "evil-browser",
+            },
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(fake_http.requests[0]["json"]["participantName"], "synth:Corey:portal")
+        self.assertEqual(fake_http.requests[0]["json"], {
+            "participantName": "synth:Corey:portal",
+            "continuityKey": "synth:Corey",
+            "surface": "portal",
+        })
 
     def test_unconfigured_bridge_fails_closed_without_network_call(self):
         client, fake_http = self.build_client(configured=False)
@@ -166,10 +145,7 @@ class PresenceBridgeTests(unittest.TestCase):
         self.assertEqual(fake_http.requests, [])
 
     def test_upstream_failure_returns_stable_error_not_upstream_body(self):
-        upstream = httpx.Response(
-            500,
-            json={"secret_diagnostic": "provider internals should not leak"},
-        )
+        upstream = httpx.Response(500, json={"secret_diagnostic": "provider internals should not leak"})
         client, _ = self.build_client(upstream_response=upstream)
         response = client.post("/api/presence/voice/token", headers=self.auth_headers(), json={})
         self.assertEqual(response.status_code, 502)
@@ -177,8 +153,7 @@ class PresenceBridgeTests(unittest.TestCase):
         self.assertNotIn("secret_diagnostic", response.text)
 
     def test_invalid_upstream_token_shape_is_rejected(self):
-        upstream = httpx.Response(200, json={"token": "", "conversationId": None})
-        client, _ = self.build_client(upstream_response=upstream)
+        client, _ = self.build_client(upstream_response=httpx.Response(200, json={"token": "", "conversationId": None}))
         response = client.post("/api/presence/voice/token", headers=self.auth_headers(), json={})
         self.assertEqual(response.status_code, 502)
         self.assertEqual(response.json(), {"error": "invalid_voice_token_response"})
@@ -189,16 +164,13 @@ class PresenceBridgeTests(unittest.TestCase):
         limiter = SlidingWindowLimiter(limit=2, window_seconds=60, clock=clock)
         client, fake_http = self.build_client(upstream_response=upstream, token_limiter=limiter)
         headers = self.auth_headers()
-
         self.assertEqual(client.post("/api/presence/voice/token", headers=headers).status_code, 200)
         self.assertEqual(client.post("/api/presence/voice/token", headers=headers).status_code, 200)
         limited = client.post("/api/presence/voice/token", headers=headers)
-
         self.assertEqual(limited.status_code, 429)
         self.assertEqual(limited.json(), {"error": "voice_token_rate_limited"})
         self.assertEqual(limited.headers.get("Retry-After"), "60")
         self.assertEqual(len(fake_http.requests), 2)
-
         clock.advance(60)
         self.assertEqual(client.post("/api/presence/voice/token", headers=headers).status_code, 200)
         self.assertEqual(len(fake_http.requests), 3)
@@ -207,10 +179,7 @@ class PresenceBridgeTests(unittest.TestCase):
         upstream = httpx.Response(200, json={"token": "voice-token", "conversationId": "conv_auth"})
         limiter = SlidingWindowLimiter(limit=1, window_seconds=60, clock=FakeClock())
         client, fake_http = self.build_client(upstream_response=upstream, token_limiter=limiter)
-
-        for _ in range(5):
-            self.assertEqual(client.post("/api/presence/voice/token").status_code, 401)
-
+        for _ in range(5): self.assertEqual(client.post("/api/presence/voice/token").status_code, 401)
         allowed = client.post("/api/presence/voice/token", headers=self.auth_headers())
         self.assertEqual(allowed.status_code, 200)
         self.assertEqual(len(fake_http.requests), 1)
@@ -227,7 +196,6 @@ class PresenceBridgeTests(unittest.TestCase):
         }
         upstream = httpx.Response(200, json={"jobs": [job], "count": 1})
         client, fake_http = self.build_client(upstream_response=upstream)
-
         response = client.get("/api/presence/jobs?limit=12&status=running", headers=self.auth_headers())
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["jobs"][0]["jobId"], job["jobId"])
@@ -238,20 +206,8 @@ class PresenceBridgeTests(unittest.TestCase):
 
     def test_job_cancel_returns_cancel_requested_state_not_fake_completion(self):
         job_id = "job_0123456789abcdef01234567"
-        upstream = httpx.Response(
-            202,
-            json={
-                "job": {
-                    "jobId": job_id,
-                    "goal": "Long research",
-                    "status": "cancel_requested",
-                    "receipts": [],
-                    "events": [],
-                }
-            },
-        )
+        upstream = httpx.Response(202, json={"job": {"jobId": job_id, "goal": "Long research", "status": "cancel_requested", "receipts": [], "events": []}})
         client, fake_http = self.build_client(upstream_response=upstream)
-
         response = client.post(f"/api/presence/jobs/{job_id}/cancel", headers=self.auth_headers())
         self.assertEqual(response.status_code, 202)
         self.assertEqual(response.json()["job"]["status"], "cancel_requested")
