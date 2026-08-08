@@ -49,13 +49,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      # npm install is intentional until the repository's existing lockfile is
-      # refreshed to include the newly introduced ElevenLabs SDK dependency.
+      # npm install is temporary while this PR refreshes the repository's stale
+      # lockfile. The generated lock is exported below, committed back to the
+      # branch, and this workflow will then switch permanently to npm ci.
       - run: npm install
+      - name: Export refreshed package lock
+        uses: actions/upload-artifact@v4
+        with:
+          name: react-portal-package-lock
+          path: react-portal/package-lock.json
+          if-no-files-found: error
+          retention-days: 1
       - name: Audit shipped production dependencies
-        # Dev/build tooling advisories are still visible in npm install output,
-        # but only high/critical vulnerabilities reachable from the production
-        # dependency tree block a client-facing release here.
         run: npm audit --omit=dev --audit-level=high
       - run: npm run build
       - run: npm test
