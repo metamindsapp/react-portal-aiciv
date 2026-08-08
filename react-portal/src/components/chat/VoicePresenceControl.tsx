@@ -97,9 +97,10 @@ function VoicePresenceControlInner() {
       const permissionStream = await navigator.mediaDevices.getUserMedia({ audio: true })
       permissionStream.getTracks().forEach((track) => track.stop())
 
-      const credentials = await apiPost<VoiceTokenResponse>('/api/presence/voice/token', {
-        participantName: 'portal-web',
-      })
+      // Deliberately omit participantName. The authenticated Portal server knows
+      // the CIV + human relationship and derives the stable participant label;
+      // browser metadata should never be treated as identity authority.
+      const credentials = await apiPost<VoiceTokenResponse>('/api/presence/voice/token')
 
       if (!credentials.token) {
         throw new Error('The voice service did not return a usable session token.')
