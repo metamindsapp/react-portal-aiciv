@@ -12,12 +12,13 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@elevenlabs/react": "1.11.0",
     "date-fns": "^4.1.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.13.1",
-    "remark-gfm": "^4.0.1",
+    "remark-gfm": "^4.1.0",
     "zustand": "^5.0.12"
   },
   "devDependencies": {
