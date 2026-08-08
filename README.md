@@ -1,135 +1,322 @@
 # AICIV React Portal
 
-The AICIV React Portal is the **human-facing control surface for a persistent AICIV**. It is not just a chat UI: it is the per-CIV workspace where a human can converse with the primary intelligence, inspect live runtime state, work with agent teams, operate the browser, use calendar/mail/docs/sheets, manage the agent organization, and now talk to the same AICIV through low-latency voice Presence.
+The AICIV React Portal is the **human-facing operating environment for a persistent AICIV**.
 
-The Portal intentionally sits at the boundary between a human/product UI and the local AICIV runtime. Today that runtime is primarily Claude Code + tmux + local files/services. The Portal absorbs those implementation details so other surfaces—voice, mobile, Reachy, watch/earbuds, and future clients—do not have to learn them.
+It is not just a chat application and it is not an admin dashboard bolted onto an AI. The Portal is the per-CIV workspace where a human and an AICIV share conversation, low-latency voice Presence, durable work, returned results, decisions, agent teams, browser control, calendar/mail, knowledge, structured data, and raw operational visibility.
 
-> **Core design idea:** the Portal is the canonical local control-plane adapter for one AICIV. Chat, voice Presence, tools, agents, files, and external services should converge on the same durable intelligence rather than creating separate “bots” per interface.
+The Portal deliberately sits at the boundary between product UX and the local AICIV runtime. Today that runtime is primarily Claude Code + tmux + local files/services. The Portal absorbs those implementation details so other surfaces—voice, mobile, Reachy, watch/earbuds, and future clients—can interact with the same intelligence without learning how its container is wired.
+
+> **Core design idea:** one persistent intelligence, many surfaces. Chat, voice, agents, files, tools, background jobs, browser sessions, and future embodied clients should converge on the same durable AICIV rather than creating separate “bots” per interface.
 
 ---
 
-## Current system at a glance
+# Current product model
+
+The Portal now separates three collaboration timescales:
 
 ```text
-                               HUMAN
-                                 │
-              ┌──────────────────┼──────────────────┐
-              │                  │                  │
-          typed Portal       voice Portal       operator UI
-              │                  │                  │
-              │          ElevenLabs WebRTC          │
-              │                  │                  │
-              │          Presence Gateway           │
-              │           fast cognition            │
-              │                  │                  │
-              └──────────────┬───┴──────────────────┘
-                             │
-                      React Portal API
-                   Python / Starlette :8097
-                             │
-           ┌─────────────────┼───────────────────┐
-           │                 │                   │
-        tmux /            CivOS APIs          local state
-      Claude Code     AgentCal / Sheets      JSONL / SQLite
-           │          AgentMail / HUB             │
-           │                                     │
-           └────────────── PRIMARY AICIV ─────────┘
-                         agents / tools
-                         durable work
+human ↔ AICIV relationship       durable / long-lived
+        │
+        ├── durable jobs          seconds → hours/days
+        │
+        └── realtime Presence     milliseconds → minutes
 ```
 
-Voice is deliberately a **Presence layer**, not a second AICIV. The low-latency voice model can answer directly or call `ask_primary(...)` to create a durable job in the primary AICIV. Completion is reported with explicit receipts; a voice session ending does not end the job.
+That separation is visible in the UX:
+
+```text
+                           HUMAN
+                             │
+            ┌────────────────┼────────────────┐
+            │                │                │
+          Now              Inbox         Conversation
+     "what is true?"   "what came back?"   "talk/work"
+            │                │                │
+            └────────────── Portal ───────────┘
+                             │
+                  global Voice Presence
+                             │
+                  AICIV Presence Gateway
+                             │
+                  ┌──────────┴──────────┐
+                  │                     │
+            fast answer           ask_primary(...)
+                                        │
+                                 durable Presence job
+                                        │
+                                   React Portal
+                                        │
+                                 primary tmux/Claude
+                                        │
+                                  DURABLE AICIV
+                                  agents / tools
+                                        │
+                              explicit result + receipts
+                                        │
+                                  Now / Inbox
+```
+
+A voice/WebRTC session can disappear while durable work continues. A returned result can survive browser/device changes. A human decision is input to the durable job, **not proof that the resulting action succeeded**.
 
 ---
 
-## What is in this repository
+# Repository layout
 
 ```text
 react-portal-aiciv/
-├── portal_server.py          # Core Starlette Portal backend / local AICIV adapter
-├── portal_entrypoint.py      # Production entrypoint; adds optional Presence routes
-├── presence_bridge.py        # Same-origin Portal → Presence token bridge + rate limiting
-├── start.sh                  # Canonical launcher (defaults to port 8097)
-├── release_notes.json
+├── portal_server.py             # Mature core Starlette Portal / local AICIV adapter
+├── portal_entrypoint.py         # Production entrypoint + narrow extension modules
+├── presence_bridge.py           # Portal ↔ Presence Gateway routes
+├── aiciv_inbox.py               # Shared Result/Decision Inbox annotations
+├── start.sh                     # Canonical launcher; defaults to :8097
 │
-├── react-portal/             # React 19 + TypeScript + Vite client
+├── react-portal/                # React 19 + TypeScript + Vite client
 │   ├── src/
-│   │   ├── components/       # Product surfaces and shared UI
-│   │   ├── stores/           # Zustand state stores
-│   │   ├── api/              # Typed-ish same-origin API adapters
-│   │   ├── types/            # TypeScript domain interfaces
-│   │   ├── styles/           # Global design tokens / CSS
-│   │   ├── utils/
-│   │   └── test/             # Vitest frontend tests
+│   │   ├── components/
+│   │   │   ├── now/             # AICIV Now synthesis cockpit
+│   │   │   ├── inbox/           # Needs You / Results / Archive
+│   │   │   ├── presence/        # global Presence shell capability
+│   │   │   ├── chat/
+│   │   │   ├── browser/
+│   │   │   ├── docs/
+│   │   │   ├── sheets/
+│   │   │   └── ...
+│   │   ├── stores/              # Zustand UI/domain stores
+│   │   ├── api/                 # same-origin API adapters
+│   │   ├── types/               # TypeScript domain contracts
+│   │   ├── styles/              # global design tokens
+│   │   └── test/                # Vitest tests
 │   ├── package.json
-│   ├── package-lock.json     # Committed reproducible dependency lock
-│   └── README.md             # AICIV-facing operating notes
+│   ├── package-lock.json        # reproducible locked install
+│   └── README.md                # AICIV-facing operating guide
 │
-├── agents/                   # Claude Code agent manifests
-├── skills/                   # AICIV skills installed by Portal deployments
-│   └── presence-job/         # Durable Presence callback/receipt skill
-├── civ-tools/                # Operational helpers available to the CIV
-│   └── react.py              # Direct reaction/sentiment append tool
-├── test_presence_bridge.py   # Focused Presence trust-boundary tests
-└── .github/workflows/        # CI, including frontend build/test/security gate
+├── agents/                      # Claude Code agent manifests
+├── skills/
+│   └── presence-job/            # durable job callback + decision protocol
+├── civ-tools/
+│   └── react.py                 # direct collaboration reaction helper
+├── docs/
+│   └── AICIV_NATIVE_PORTAL_REVIEW.md
+├── test_presence_bridge.py
+├── test_aiciv_inbox.py
+└── .github/workflows/
 ```
 
-### Important backend design note
+## Backend extension rule
 
-`portal_server.py` is the mature core server and currently contains a large amount of Portal functionality in one Starlette module. New voice integration **does not patch that monolith directly**. `portal_entrypoint.py` imports the existing app and registers the narrow `presence_bridge.py` routes before starting Uvicorn. Preserve that low-blast-radius pattern when adding cross-cutting integrations.
+`portal_server.py` is a mature, large Starlette module. New cross-cutting capabilities should **not automatically grow that monolith**.
+
+The preferred pattern is the one used by Presence and Inbox:
+
+```text
+portal_server.app
+      │
+portal_entrypoint.py
+      ├── register_presence_routes(...)
+      └── register_aiciv_inbox_routes(...)
+```
+
+Extract old domains opportunistically when they are being meaningfully changed; do not rewrite the whole server merely for architectural purity.
 
 ---
 
-# Portal surfaces
+# Information architecture
 
-The current React application exposes these top-level routes:
+The Portal is moving away from a flat list of backend subsystems toward a human-intent model.
 
-| Route | Surface | What it is for |
+Desktop navigation is grouped as:
+
+```text
+Together
+  Now
+  Inbox
+  Conversation
+
+Work
+  Teams
+  Calendar
+  Mail
+  Org
+  TGIM
+
+Knowledge
+  Docs
+  Sheets
+  HUB
+  Bookmarks
+  Signals
+
+Control
+  Browser
+  Terminal
+  Context
+  Status
+  Settings
+```
+
+Mobile prioritizes the high-frequency collaboration loop:
+
+```text
+Now · Chat · Inbox · Mail · More
+```
+
+Every previous power/operator surface remains available.
+
+---
+
+# Current Portal surfaces
+
+`react-portal/src/App.tsx` is the source of truth for top-level React routes.
+
+| Route | Surface | Purpose |
 |---|---|---|
-| `/` | **Chat** | Primary typed conversation with the live AICIV; history, WebSocket updates, reactions, file uploads, artifact preview, search, and voice Presence control |
-| `/terminal` | **Terminal** | Direct terminal/tmux view for advanced human operation |
-| `/teams` | **Teams** | Live tmux pane view; inspect active panes and inject messages into a selected pane |
-| `/hub` | **HUB** | Group/room/thread/post collaboration interface backed by the HUB service |
-| `/tgim` | **TGIM** | Embedded Task & Goal Intelligence Manager command center |
-| `/browser` | **Browser** | Shared browser viewport with agent/human control handoff and action log |
-| `/orgchart` | **Org Chart** | Agent hierarchy, discovery, hiring/organization workflows, team structure |
-| `/calendar` | **AgentCal** | Calendar/task interface with recurring scheduling and AgentCal integration |
-| `/mail` | **AgentMail** | AgentMail inbox/sent/thread/compose surface |
-| `/bookmarks` | **Bookmarks** | Saved chat messages / useful conversational references |
-| `/context` | **Context** | Live Claude context-window utilization and session information |
-| `/points` | **Points** | Reaction/sentiment score dashboard and collaboration signal |
-| `/docs` | **Docs / Knowledge Base** | Searchable Markdown documents with tags and visibility controls |
-| `/sheets` | **Sheets** | AgentSheets workbooks, sheets, typed columns, rows, inline editing and export |
-| `/status` | **Status** | CIV, tmux, Claude, Telegram, BOOP, auth and context operational health |
-| `/settings` | **Settings** | Identity display, theme, BOOP toggle, quick-fire messages, resources and logout |
-
-The route list in `react-portal/src/App.tsx` is the source of truth when adding/removing a top-level Portal surface. The desktop navigation list currently lives in `components/layout/Sidebar.tsx`; mobile navigation has its own component.
+| `/now` | **AICIV Now** | Meaning-first synthesis of primary health, durable work, returned results, context pressure, unread mail, active panes and recent activity |
+| `/inbox` | **Shared AICIV Inbox** | `Needs You`, `Results`, and `Archive`; receipt-backed job outcomes plus genuine structured human decision boundaries |
+| `/` | **Conversation** | Primary typed conversation, search, reactions, upload/artifact preview, commands and speech-to-text dictation |
+| `/teams` | **Teams** | Live tmux panes and direct pane injection for advanced operation |
+| `/calendar` | **AgentCal** | Calendar/task interface and recurring scheduling |
+| `/mail` | **AgentMail** | AgentMail inbox, sent mail, threads and compose |
+| `/orgchart` | **Org** | Agent hierarchy, discovery, hiring and organization workflows |
+| `/tgim` | **TGIM** | Embedded Task & Goal Intelligence Manager |
+| `/docs` | **Docs** | Searchable Markdown knowledge with tags and visibility |
+| `/sheets` | **Sheets** | Workbooks, typed columns, rows, editing and export |
+| `/hub` | **HUB** | Group/room/thread/post collaboration |
+| `/bookmarks` | **Bookmarks** | Saved conversational references; currently browser-local and a candidate for later server sync |
+| `/points` | **Signals** | Reaction/sentiment collaboration signal |
+| `/browser` | **Browser** | Shared agent/human browser viewport, control handoff and action log |
+| `/terminal` | **Terminal** | Direct terminal/tmux control |
+| `/context` | **Context** | Live Claude context-window/session information |
+| `/status` | **Status** | Raw CIV/tmux/Claude/BOOP/auth/process health |
+| `/settings` | **Settings** | Identity, appearance, BOOP, quick-fire messages and logout |
 
 ---
 
-# Chat: the primary human ↔ AICIV surface
+# AICIV Now
 
-Portal Chat is the highest-level conversational interface into the same primary AICIV session used by the rest of the system.
+`/now` is the first synthesis layer over the Portal's subsystem interfaces.
 
-Current Chat capabilities include:
+It currently combines:
 
-- merged/history-backed conversation display;
-- WebSocket updates from `/ws/chat`;
-- optimistic human message insertion;
-- message reactions;
-- text search/highlighting;
-- file upload through `/api/chat/upload`;
-- artifact/code preview panel;
+- primary tmux + Claude availability;
+- context-window pressure;
+- active durable Presence jobs;
+- recent completed results and receipts;
+- waiting/failed/cancel-requested work needing attention;
+- unread AgentMail;
+- active team/tmux panes;
+- normalized recent activity.
+
+The raw subsystem pages still exist as drill-down views. The principle is:
+
+> **meaning first, machinery second.**
+
+For example, the default human-facing state should be “Primary AICIV needs attention,” with Status/Terminal available to explain *why*, rather than forcing the human to inspect process flags before knowing anything is wrong.
+
+`useNowStore` is the first shared synthesis model. It currently normalizes several sources into `AicivActivityItem`; the long-term direction is a typed server event/activity stream instead of independent polling loops.
+
+---
+
+# Shared AICIV Inbox
+
+`/inbox` is the durable collaboration return surface.
+
+It has three modes:
+
+## Needs You
+
+Shows durable work that has reached a **genuine human judgment boundary**.
+
+An AICIV can report a `waiting` event with a structured decision object:
+
+```json
+{
+  "decision": {
+    "id": "dec_provider_choice",
+    "question": "Which provider should we use for the next cohort?",
+    "context": "Provider B won latency; Provider A has more production history.",
+    "recommendation": "Use B for a reversible cohort and keep A as fallback.",
+    "risk": "B has less production history in our stack.",
+    "options": [
+      {"id": "provider_b", "label": "Use Provider B"},
+      {"id": "provider_a", "label": "Stay on Provider A"},
+      {"id": "more_testing", "label": "Run more testing"}
+    ],
+    "allowFreeform": true
+  }
+}
+```
+
+The Portal renders a decision card with context, recommendation, risk and options.
+
+When the human chooses:
+
+1. Portal sends a structured decision-response envelope through the existing authenticated chat delivery path into the primary AICIV.
+2. Only after delivery succeeds does Portal store the shared decision-response annotation.
+3. The AICIV resumes the durable job.
+4. Any actual consequence must later report `succeeded`, `failed`, `cancelled`, etc. through the durable callback protocol.
+
+**Human choice is not execution proof.**
+
+## Results
+
+Shows terminal durable job outcomes from the Presence Gateway:
+
+- `succeeded`;
+- `failed`;
+- `cancelled`.
+
+Successful results can include machine-readable output plus evidence/receipts.
+
+## Archive
+
+Stores human-facing inbox organization separately from job truth.
+
+The Portal persists only:
+
+- `seenAt`;
+- `archivedAt`;
+- decision-response annotations.
+
+These live in a small atomic JSON store (`.aiciv-inbox-state.json` by default, mode `0600`) and are shared across Portal browsers/devices.
+
+The file can be relocated with:
+
+```bash
+AICIV_INBOX_STATE_FILE=/srv/portal/state/aiciv-inbox.json
+```
+
+The inbox never becomes a second source of truth for job status/results.
+
+---
+
+# Conversation
+
+Conversation remains the primary typed human ↔ AICIV surface.
+
+Capabilities include:
+
+- merged/history-backed conversation;
+- WebSocket updates;
+- optimistic human messages;
+- reactions;
+- search/highlighting;
+- uploads;
+- artifact/code preview;
+- slash commands;
 - quick-fire messages;
-- low-latency voice Presence control.
+- browser speech-to-text **Dictate**.
 
-Portal chat is also the first transport used by the Presence Gateway to inject durable work into the active AICIV. **A chat delivery receipt is not a task-completion receipt.** Durable Presence jobs use a separate job state machine and explicit callbacks.
+The composer microphone is explicitly dictation: it fills the text box.
+
+Full realtime conversational voice is the global **Talk live** Presence control in the Portal header.
 
 ---
 
-# Voice Presence
+# Global Voice Presence
 
-Voice Presence is now a first-class Portal capability.
+Voice Presence is available from the app shell, not only from Chat.
+
+Provider-specific ElevenLabs code stays encapsulated in `VoicePresenceControl`; the shell consumes a generic Presence capability.
 
 ## Trust boundary
 
@@ -148,65 +335,75 @@ ElevenLabs Speech Engine
   └── short-lived conversation token → Browser WebRTC
 ```
 
-The browser never receives:
+The browser never receives the long-lived gateway, ElevenLabs, OpenAI, callback, or external-service credentials.
 
-- `PRESENCE_GATEWAY_API_KEY`;
-- the ElevenLabs API key;
-- the OpenAI API key;
-- `AICIV_CALLBACK_API_KEY`;
-- the Portal's upstream service credentials.
+## Portal Presence API
 
-It receives only a short-lived ElevenLabs conversation credential from the authenticated same-origin Portal route.
-
-## Portal Presence endpoints
-
-`presence_bridge.py` registers:
+`presence_bridge.py` currently registers:
 
 ```text
 GET  /api/presence/status
 POST /api/presence/voice/token
+GET  /api/presence/jobs
+GET  /api/presence/jobs/{job_id}
+POST /api/presence/jobs/{job_id}/cancel
 ```
 
-The token route:
+The bridge:
 
-- authenticates Portal first;
-- fails closed if Presence is not configured;
-- derives participant identity from trusted Portal CIV/human state, never browser metadata;
-- rate-limits token minting (default 12 attempts per 60 seconds per Portal process);
-- calls the Presence Gateway with a server-only bearer key;
-- strips upstream diagnostic/provider bodies from client errors;
-- returns only `{ token, conversationId }`.
-
-## Frontend voice behavior
-
-`VoicePresenceControl.tsx` uses `@elevenlabs/react` and is lazy-loaded from Chat so the ElevenLabs/WebRTC bundle does not tax every initial Portal page load.
-
-User-facing states include:
-
-- checking availability;
-- unavailable;
-- ready;
-- connecting;
-- listening;
-- speaking;
-- muted;
-- retry/error.
-
-Microphone permission is requested from a direct user gesture before the provider owns the live WebRTC capture.
+- requires Portal auth;
+- keeps `PRESENCE_GATEWAY_API_KEY` server-side;
+- derives voice participant identity from trusted CIV/human state, not browser metadata;
+- rate-limits expensive voice token minting;
+- validates durable job IDs before forwarding;
+- normalizes upstream failure responses rather than leaking provider diagnostics.
 
 ---
 
-# Durable Presence jobs and receipts
+# Durable Presence jobs
 
-The Portal repository installs the `presence-job` skill into AICIV environments. This is the callback side of the Presence Gateway's durable delegation protocol.
+A substantial voice request can become a durable job through the Presence model's native `ask_primary(...)` tool.
 
-A Presence request arriving in the primary AICIV contains a durable marker such as:
+A job is independent of the voice connection and has an explicit lifecycle.
+
+Typical states:
+
+```text
+queued
+  ↓
+accepted
+  ↓
+running
+  ↔ waiting
+  ↓
+succeeded | failed | cancelled
+```
+
+Cancellation is intentionally two phase:
+
+```text
+request stop
+   ↓
+cancel_requested
+   ↓
+AICIV actually stops
+   ↓
+cancelled receipt
+```
+
+Portal must not call `cancel_requested` “cancelled.”
+
+---
+
+# AICIV callback and decision protocol
+
+The Portal repository distributes `skills/presence-job/` into AICIV deployments.
+
+A durable request is marked like:
 
 ```text
 [PRESENCE DURABLE JOB job_0123456789abcdef01234567]
 ```
-
-The job is **not tied to the current voice turn or WebRTC connection**.
 
 The AICIV reports lifecycle events with:
 
@@ -214,7 +411,7 @@ The AICIV reports lifecycle events with:
 python3 ~/.claude/skills/presence-job/presence_job.py JOB_ID STATUS [options]
 ```
 
-Supported callback events:
+Supported callbacks:
 
 ```text
 running
@@ -225,214 +422,197 @@ failed
 cancelled
 ```
 
-Important semantics:
+The skill documents both:
 
-- `accepted` means the durable request was persisted/delivered, **not completed**;
-- `cancel_requested` means a stop was requested, **not that work has stopped**;
-- `succeeded` must include an actually completed result and appropriate evidence/receipts;
-- `cancelled` should only be emitted after work genuinely stops or reaches a safe stopping point;
-- callback retries may reuse the same event ID; the gateway de-duplicates them.
+- result/receipt completion semantics;
+- the structured human-decision protocol used by `/inbox`.
 
-See `skills/presence-job/SKILL.md` for the complete AICIV protocol and examples.
+Key invariants:
+
+- delivery is not completion;
+- a waiting decision is not a failure;
+- a human decision response is new durable-job input, not execution proof;
+- `succeeded` requires the work to actually be complete;
+- callbacks can carry evidence/receipts;
+- retries can reuse stable event IDs because the gateway de-duplicates them.
 
 ---
 
-# AICIV reactions and collaboration signal
+# Inbox collaboration-state API
 
-Portal supports a lightweight shared reaction/sentiment channel.
+`aiciv_inbox.py` is a narrow Portal extension module.
 
-The human can react in Chat. The AICIV can react directly from inside its container with:
+Routes:
 
-```bash
-python3 ~/civ/tools/react.py <msg_id> "🔥" "message preview" user
+```text
+GET  /api/aiciv/inbox/state
+POST /api/aiciv/inbox/{job_id}/seen
+POST /api/aiciv/inbox/{job_id}/archive
+POST /api/aiciv/inbox/{job_id}/restore
+POST /api/aiciv/inbox/{job_id}/decisions/{decision_id}/respond
 ```
 
-Both flows append to the same reaction log. The `/points` surface aggregates the resulting collaboration signal.
-
-The AICIV-facing instructions and emoji/point conventions live in `react-portal/README.md`.
+The final endpoint is only an **annotation store**. Its receipt explicitly does not claim AICIV delivery or execution. The frontend proves `/api/chat/send` delivery separately before recording the annotation.
 
 ---
 
-# Agent organization
+# Agents and Teams
 
-Agent manifests are Markdown files in `~/.claude/agents/` with YAML frontmatter.
+Agent manifests live in `~/.claude/agents/` with YAML frontmatter.
 
-Example:
+`Agent(...)` references can define hierarchy, which the Portal syncs into the Org view.
 
-```markdown
----
-name: full-stack-developer
-description: Implements frontend/backend product work
-model: opus
-tools: Read, Write, Edit, Bash, Grep, Glob, Agent(qa-engineer)
----
-
-You are the Full Stack Developer...
-```
-
-`Agent(...)` references are used to infer team hierarchy. The Portal can synchronize manifests into its agent database and render the resulting organization graph.
-
-Typical sync:
-
-```bash
-TOKEN=$(cat ~/purebrain_portal/.portal-token)
-curl -X POST \
-  -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8097/api/agents/sync
-```
-
-The repository also ships organization-oriented skills such as hiring/health/restructure workflows where present under `skills/`.
+Teams exposes raw tmux panes for power users and direct pane injection. The product direction is to add semantic agent/job state above those panes while retaining the raw operational layer underneath.
 
 ---
 
-# Knowledge, data and collaboration surfaces
+# Knowledge and data
 
-## Docs / Knowledge Base
+## Docs
 
-The Docs surface provides Markdown documents with:
+Shared Markdown documents with create/edit/delete, tags, visibility and search.
 
-- create/edit/delete;
-- full-text client-side search over loaded documents;
-- tags;
-- public/private/CIV-only visibility metadata;
-- recent/alphabetical sorting;
-- responsive list/detail editing UI.
+## Sheets
 
-## AgentSheets
-
-The Sheets surface supports:
-
-- workbooks;
-- multiple sheets;
-- typed columns (`text`, `number`, `boolean`, `date`, `json`);
-- row create/update/delete;
-- inline cell editing;
-- pagination;
-- export.
+Workbooks/sheets with typed columns, row CRUD, inline cell editing, pagination and export.
 
 ## HUB
 
-HUB exposes collaboration structure as:
+Structured collaboration:
 
 ```text
 group → room → thread → posts/replies
 ```
 
-The Portal proxies HUB access through the local server rather than exposing remote service credentials to the browser.
+## Bookmarks
 
-## Shared browser
-
-The Browser surface is explicitly collaborative. It streams a server-controlled browser viewport over WebSocket and allows a human to take/release control while preserving an action log.
-
-The intended product direction is **co-navigation**, not a separate human browser: the human should be able to see what the AICIV is doing, intervene when useful, and hand control back without losing task context.
-
-## TGIM
-
-The current TGIM integration is a sandboxed iframe to the externally hosted TGIM command center. It is intentionally a shallow integration today; future native task/goal integration should prefer structured APIs/events over deeper iframe coupling.
+Currently stored in browser `localStorage`. This is a known mismatch with the shared AICIV-object model and should eventually become server-shared.
 
 ---
 
-# Backend and local data model
+# Shared browser
 
-The Portal server is intentionally close to the CIV runtime and therefore touches several local state sources.
+Browser is explicitly a human/AICIV co-control primitive.
 
-Key local paths/state include:
+The Portal streams a server-controlled browser viewport, preserves an action log, and supports human takeover/handback.
 
-```text
-~/.aiciv-identity.json                 # CIV/human identity
-~/.claude/history.jsonl                # Claude history index
-~/.claude/projects/...                 # Claude project JSONL sessions
-~/portal_uploads/                      # human uploads
-~/civ/logs/                            # CIV logs / imports
-~/purebrain_portal/.portal-token       # Portal bearer credential
-~/purebrain_portal/portal-chat.jsonl   # Portal chat log
-~/purebrain_portal/*.db                # local SQLite stores where applicable
+The intended direction is richer co-navigation:
+
+- semantic action steps;
+- explicit takeover handshakes;
+- annotations/highlights;
+- evidence capture attached to jobs;
+- approval boundaries for sensitive actions;
+- resumable sessions.
+
+---
+
+# Reactions / Signals
+
+The human can react to chat messages. The AICIV can react from inside the container using:
+
+```bash
+python3 ~/civ/tools/react.py <msg_id> "🔥" "message preview" user
 ```
 
-The exact deployment directory can vary, but `~/purebrain_portal` is the conventional fleet location.
-
-The core server also integrates with CivOS-style services such as AgentCal, AgentSheets and AgentAuth and contains additional administrative/referral/client-management endpoints used by the broader PureBrain deployment.
+Both paths feed the collaboration signal shown under `/points` (labeled **Signals** in grouped navigation).
 
 ---
 
-# Authentication and security model
+# Authentication and secrets
 
 ## Portal bearer
 
-The primary Portal UI/API uses a bearer token stored in:
+The per-CIV Portal bearer is conventionally stored in:
 
 ```text
 ~/purebrain_portal/.portal-token
 ```
 
-If the file does not exist, `portal_server.py` generates a random token and writes it with restrictive permissions.
+If missing, the server generates one with restrictive permissions.
 
-The current React client stores the Portal bearer in browser `localStorage`. This is a practical per-CIV deployment mechanism, not the desired final multi-tenant identity architecture. A future public/fleet-facing Portal should move toward short-lived application sessions/OIDC and stronger browser credential isolation.
+The current React app stores this Portal credential in browser `localStorage`. That is acceptable for today's trusted per-CIV deployment, but it is not the final public/multi-tenant auth architecture.
 
-## Service credentials
+## Presence credentials
 
-External service credentials remain server-side. The frontend uses same-origin Portal APIs/proxies.
+Keep these authorities separate:
 
-## Presence separation
+```text
+PRESENCE_GATEWAY_API_KEY    Portal ↔ Gateway operational authority
+AICIV_CALLBACK_API_KEY     AICIV → Gateway job-event authority
+```
 
-Use two different Presence secrets:
+Never reuse the Portal bearer for either.
 
-- `PRESENCE_GATEWAY_API_KEY` — normal server-to-server Portal/Gateway operations;
-- `AICIV_CALLBACK_API_KEY` — callback-only authority for trusted AICIVs to report durable job events.
-
-Do not reuse the Portal bearer as either Presence key.
+Provider/service keys remain server-side.
 
 ---
 
 # Prerequisites
 
-Recommended/current development baseline:
+Current baseline:
 
-- **Node.js 22+**;
-- **npm** with the committed lockfile;
-- **Python 3.10+** (3.12 is used in focused CI);
-- **tmux**;
-- **Claude Code** running in the CIV environment;
-- Linux/container environment for the normal fleet deployment.
+- Node.js **22+**;
+- npm using the committed lockfile;
+- Python **3.10+** (focused CI uses 3.12);
+- tmux;
+- Claude Code in the CIV environment;
+- normal Linux/container deployment.
 
-Core Python dependencies include:
+Typical Python dependencies include:
 
 ```bash
 pip3 install starlette uvicorn aiosqlite httpx pyyaml agentmail cryptography
 ```
 
-Install any service-specific dependencies required by the features enabled in your deployment.
+Install additional subsystem-specific dependencies for features enabled in your environment.
 
 ---
 
-# Installation / deployment
-
-## 1. Clone
+# Install / build
 
 ```bash
 git clone https://github.com/metamindsapp/react-portal-aiciv.git
-cd react-portal-aiciv
+cd react-portal-aiciv/react-portal
+npm ci
+npm run build
+npm test
 ```
 
-For the normal per-CIV deployment, copy/sync the repository contents into the Portal directory, conventionally:
+The committed lockfile is authoritative for frontend dependency resolution.
+
+Production CI additionally runs:
+
+```bash
+npm audit --omit=dev --audit-level=high
+```
+
+High/critical vulnerabilities reachable from the shipped dependency tree block the Portal voice/product CI gate.
+
+---
+
+# Typical per-CIV deployment
+
+The conventional deployment root is:
 
 ```text
 ~/purebrain_portal
 ```
 
-Ensure the deployment includes at least:
+Ensure it contains:
 
 ```text
 portal_server.py
 portal_entrypoint.py
 presence_bridge.py
+aiciv_inbox.py
 start.sh
 react-portal/
 skills/
 civ-tools/
 ```
 
-Install/sync agent manifests and skills as appropriate:
+Install/sync AICIV assets:
 
 ```bash
 mkdir -p ~/.claude/agents ~/.claude/skills ~/civ/tools
@@ -442,9 +622,11 @@ cp civ-tools/react.py ~/civ/tools/react.py
 chmod +x ~/civ/tools/react.py
 ```
 
-## 2. Identity
+---
 
-Portal auto-detects identity from:
+# Identity
+
+Portal auto-detects the local relationship from:
 
 ```json
 ~/.aiciv-identity.json
@@ -454,232 +636,138 @@ Portal auto-detects identity from:
 }
 ```
 
-If missing, development fallbacks are used.
+Development fallbacks are used when absent.
 
-## 3. Environment
+---
 
-Portal reads many service settings from process environment or `~/.env` depending on subsystem.
+# Presence configuration on Portal
 
-Common CivOS integrations:
-
-```bash
-# AgentCal
-AICIVCAL_API_KEY=
-AICIVCAL_URL=http://5.161.90.32:8300
-
-# AgentSheets
-AGENTSHEETS_URL=http://5.161.90.32:8500
-AGENTSHEETS_API_KEY=
-
-# AgentAuth (preferred shared service auth when configured)
-AGENTAUTH_URL=
-AGENTAUTH_PRIVATE_KEY=
-AGENTAUTH_PUBLIC_KEY=
-
-# AgentMail
-AGENTMAIL_API_KEY=
-AGENTMAIL_INBOX=
-```
-
-### Optional Presence integration
-
-On the Portal/AICIV host:
+Configure server-side:
 
 ```bash
 PRESENCE_GATEWAY_URL=https://presence.example.com
-PRESENCE_GATEWAY_API_KEY=<long server-only gateway key>
-AICIV_CALLBACK_API_KEY=<separate long callback-only key>
+PRESENCE_GATEWAY_API_KEY=<long random operational secret>
 
 # Optional token-mint protection tuning
 PRESENCE_GATEWAY_TIMEOUT_SECONDS=8
 PRESENCE_VOICE_TOKEN_LIMIT=12
 PRESENCE_VOICE_TOKEN_WINDOW_SECONDS=60
+
+# Optional Inbox state relocation
+AICIV_INBOX_STATE_FILE=/srv/portal/state/aiciv-inbox.json
 ```
 
-`PRESENCE_GATEWAY_API_KEY` must match the gateway's operational bearer. `AICIV_CALLBACK_API_KEY` must match the callback authority configured on the Presence Gateway.
-
-## 4. AgentCal calendar (when applicable)
-
-Create/register a calendar with the AgentCal service and save the returned calendar ID to:
-
-```text
-~/purebrain_portal/.aicivcal-calendar-id
-```
-
-## 5. Portal bearer
-
-You may pre-create one:
+The trusted AICIV container additionally needs:
 
 ```bash
-python3 -c "import secrets; print(secrets.token_urlsafe(32))" > .portal-token
-chmod 600 .portal-token
+PRESENCE_GATEWAY_URL=https://presence.example.com
+AICIV_CALLBACK_API_KEY=<different callback-only secret>
 ```
 
-If absent, the server generates it at startup/import time.
+---
 
-## 6. Build frontend
+# Start Portal
 
-Use the committed lockfile:
-
-```bash
-cd react-portal
-npm ci
-npm run build
-npm test
-cd ..
-```
-
-CI also runs a production-dependency vulnerability gate for high/critical shipped vulnerabilities.
-
-## 7. Start Portal
-
-Use the wrapper entrypoint, not a direct `portal_server.py` invocation:
+Use the canonical launcher:
 
 ```bash
 ./start.sh
 ```
 
-Or select a port:
+or:
 
 ```bash
 ./start.sh 8097
 ```
 
-`start.sh` exports `PORT` and runs `portal_entrypoint.py`, which preserves the existing Portal app while registering optional Presence routes.
-
----
-
-# Development
-
-Frontend development:
-
-```bash
-cd react-portal
-npm ci
-npm run dev
-```
-
-Useful checks:
-
-```bash
-npm run build
-npm test
-npm run lint
-```
-
-Focused Presence bridge checks from repository root:
-
-```bash
-python3 -m py_compile presence_bridge.py portal_entrypoint.py
-python3 test_presence_bridge.py
-```
-
----
-
-# Operational checks
-
-Basic Portal status:
-
-```bash
-TOKEN=$(cat .portal-token)
-curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8097/api/status
-```
-
-Presence capability status through Portal:
-
-```bash
-curl -H "Authorization: Bearer $TOKEN" \
-  http://127.0.0.1:8097/api/presence/status
-```
-
-For end-to-end Presence provider/Portal readiness, run `npm run doctor` in the **AICIV Presence Gateway** repository. That doctor validates provider metadata access, durable storage, Portal auth/health, callback configuration and public WSS configuration without creating paid inference or a voice conversation.
-
----
-
-# Architecture boundaries to preserve
-
-### 1. Portal owns local-runtime adaptation
-
-Portal may know about tmux, Claude Code history, local files, agent manifests and per-CIV services. Generic voice/mobile/robot clients should not.
-
-### 2. Presence owns realtime conversation
-
-Turn-taking, interruption, low-latency cognition and voice-provider integration belong in the Presence Gateway, not scattered across Portal components.
-
-### 3. Durable work has an independent lifetime
-
-A voice connection, a typed Chat turn and a long-running job are different lifecycles.
+Flow:
 
 ```text
-voice/session lifetime != job lifetime != human↔AICIV relationship lifetime
+start.sh
+  → portal_entrypoint.py
+      → imports portal_server.app
+      → registers Presence routes
+      → registers shared Inbox routes
+      → starts uvicorn
 ```
 
-### 4. No completion without evidence
-
-Delivery/acceptance must never be upgraded to “done.” Durable work should terminate with an explicit status/result/receipt path.
-
-### 5. Human and AICIV should share objects
-
-Docs, sheets, browser sessions, tasks, messages and artifacts should increasingly become shared durable objects that either side can create, inspect, edit, reference and hand off.
+Do not bypass `portal_entrypoint.py` in normal deployments or the extension routes will not be registered.
 
 ---
 
-# Current technical stack
+# CI and verification
 
-## Frontend
-
-- React **19.2.7**
-- TypeScript **5.9**
-- Vite **8**
-- Zustand **5**
-- React Router **8.3.0** (currently consumed through the compatibility package alias `react-router-dom`)
-- `@elevenlabs/react` **1.11.0**
-- `react-markdown` + `remark-gfm`
-- date-fns
-- Vitest + Testing Library
+Portal product CI currently verifies:
 
 ## Backend
 
-- Python / Starlette / Uvicorn
-- aiosqlite / SQLite
-- httpx
-- tmux + Claude Code integration
-- JSONL/local-file state where useful
-- CivOS service proxies/adapters
+- extension modules compile;
+- Presence trust-boundary tests;
+- shared Inbox/auth/atomic-state tests.
+
+## Frontend
+
+- `npm ci` from the committed lockfile;
+- production dependency audit;
+- TypeScript/Vite production build;
+- Vitest suite, including Now and Inbox semantics.
+
+## Presence Job Skill
+
+A separate workflow compiles/tests the callback helper when that skill changes.
 
 ---
 
-# Known architectural pressure points
+# Reliability semantics
 
-These are not reasons to stop using the current design; they are the clearest places to evolve it as the Portal becomes a richer AICIV-native product.
+The Portal should keep using precise state language:
 
-1. **`portal_server.py` is a large multi-domain module.** Continue extracting new domains into narrow modules/routers instead of adding more unrelated endpoints directly to the monolith.
-2. **Navigation is feature/subsystem-centric.** The growing number of top-level pages should evolve toward intent-based workspaces and progressive disclosure.
-3. **Frontend status is fragmented.** Multiple surfaces poll their own endpoints; a shared AICIV activity/state/event model would improve coherence and reduce duplicate polling.
-4. **Browser auth is a long-lived bearer in localStorage.** Appropriate for the current trusted per-CIV model, but not the desired final public multi-tenant session architecture.
-5. **Many objects are page-local.** The next product leap is deep linking/cross-referencing tasks, agents, docs, sheets, browser evidence, messages and durable Presence jobs across the whole workspace.
-6. **The Portal is mostly request/response UI.** A persistent AICIV should increasingly surface proactive activity, pending decisions, completed work and recommended next actions without requiring the human to hunt through pages.
+```text
+requested ≠ accepted ≠ running ≠ waiting ≠ completed
+cancel requested ≠ cancelled
+human selected option ≠ downstream action executed
+```
+
+A quiet UI is not more trustworthy than an accurate one. New features should prefer visible stable error states over silently swallowing important failures.
 
 ---
 
-# Product direction
+# Current architectural pressure points
 
-The Portal should become less like a collection of admin pages and more like an **operating environment shared by a human and a persistent intelligence**.
+The system is intentionally evolving rather than being rewritten all at once.
 
-The strongest primitives already exist:
+Important next pressures:
 
-- conversation;
-- voice Presence;
-- durable delegation;
-- agents/teams;
-- browser co-control;
-- calendar;
-- mail;
-- documents;
-- structured data/sheets;
-- collaboration/HUB;
-- runtime/context visibility.
+1. **Unified event/activity transport** — replace independent polling with typed events where practical.
+2. **Projects/workstreams** — connect conversation, jobs, agents, docs, sheets, browser activity and decisions around real goals.
+3. **Global command palette + semantic search** — navigate/ask across the whole AICIV object space.
+4. **Shared object graph** — canonical relationships among jobs, artifacts, messages, decisions, tasks, agents and knowledge.
+5. **Semantic Teams** — human-readable agent/job state above raw panes.
+6. **Server-sync remaining browser-local state** such as Bookmarks.
+7. **Progressive `portal_server.py` decomposition** without a risky rewrite.
+8. **Typed API contracts + correlation IDs** across Portal/Presence/AICIV effects.
+9. **Public/multi-tenant auth** before broad untrusted exposure.
+10. **Mobile/Reachy surfaces** that reuse the same identity/job/result model rather than creating separate brains.
 
-The next stage is synthesis: one activity model, one command surface, one shared object graph, one notification/decision inbox, and seamless transitions between “talk to the AICIV,” “watch what it is doing,” “inspect the evidence,” and “take control.”
+The full ground-floor → 30,000-foot analysis is in:
 
-That is the intended meaning of **AICIV-native interface** in this repository.
+[`docs/AICIV_NATIVE_PORTAL_REVIEW.md`](docs/AICIV_NATIVE_PORTAL_REVIEW.md)
+
+---
+
+# Product north star
+
+The Portal should increasingly answer these questions without making the human know which subsystem to inspect:
+
+```text
+What is my AICIV doing?
+What changed while I was away?
+What came back?
+What needs my judgment?
+What is blocked?
+What evidence supports the result?
+Where can I take control?
+What should we do next?
+```
+
+That is the shift from a collection of AI subsystem pages to an **AICIV-native shared operating environment**.
