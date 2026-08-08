@@ -9,6 +9,7 @@ const NAV_GROUPS = [
     label: 'Together',
     items: [
       { to: '/now', icon: '\u{2728}', label: 'Now' },
+      { to: '/inbox', icon: '\u{1F4E5}', label: 'Inbox' },
       { to: '/', icon: '\u{1F4AC}', label: 'Conversation' },
     ],
   },
