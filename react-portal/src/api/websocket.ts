@@ -33,14 +33,13 @@ export class ChatWebSocket {
     this.disposed = false
     if (this.ws?.readyState === WebSocket.OPEN || this.ws?.readyState === WebSocket.CONNECTING) return
 
-    const token = localStorage.getItem(AUTH_TOKEN_KEY)
-    if (!token) {
-      this.setState('unauthorized')
-      return
-    }
-
+    const legacyToken = localStorage.getItem(AUTH_TOKEN_KEY)
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const url = `${proto}//${window.location.host}/ws/chat?token=${encodeURIComponent(token)}`
+    // Same-origin WebSockets automatically carry the HttpOnly session cookie.
+    // Keep the query parameter only as a migration fallback for an older browser
+    // that has not yet exchanged its stored Portal bearer.
+    const query = legacyToken ? `?token=${encodeURIComponent(legacyToken)}` : ''
+    const url = `${proto}//${window.location.host}/ws/chat${query}`
     this.setState(this.reconnectDelay > 1000 ? 'reconnecting' : 'connecting')
 
     try {
@@ -60,6 +59,9 @@ export class ChatWebSocket {
     this.ws.onmessage = (event) => {
       try {
         const msg: ChatMessage = JSON.parse(event.data)
+        // Core sends keepalive ping objects over the same channel. Ignore them
+        // rather than treating them as malformed chat messages.
+        if ((msg as unknown as { type?: string }).type === 'ping') return
         this.handlers.forEach(handler => handler(msg))
       } catch {
         window.dispatchEvent(new CustomEvent('aiciv:error', {

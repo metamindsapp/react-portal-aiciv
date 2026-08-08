@@ -24,8 +24,18 @@ from aiciv_evidence import register_evidence_routes
 from aiciv_http import install_http_boundary
 from aiciv_inbox import register_aiciv_inbox_routes
 from aiciv_projects import register_aiciv_project_routes
+from aiciv_session import install_session_auth
 from presence_bridge import register_presence_routes
 
+
+# Install short-lived HttpOnly sessions before registering authenticated
+# extensions. The middleware translates a valid session cookie into the legacy
+# bearer/query contract only inside ASGI, so existing core + extension auth
+# remains compatible while normal browsers stop retaining the long-lived bearer.
+install_session_auth(
+    portal_server.app,
+    portal_bearer=portal_server.BEARER_TOKEN,
+)
 
 register_presence_routes(
     portal_server.app,
@@ -53,14 +63,12 @@ install_http_boundary(portal_server.app)
 
 
 def _handle_sigterm(signum, frame):
-    """Preserve the Portal's clean SIGTERM behavior."""
     print("[portal] SIGTERM received, shutting down gracefully...")
     sys.exit(0)
 
 
 def main() -> None:
     signal.signal(signal.SIGTERM, _handle_sigterm)
-
     port = int(os.environ.get("PORT", 8097))
     print(f"[portal] Starting PureBrain Portal + AICIV extensions on port {port}")
     uvicorn.run(portal_server.app, host="0.0.0.0", port=port, log_level="info")
