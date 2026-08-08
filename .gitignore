@@ -5,6 +5,7 @@ dist/
 .portal-token
 .aicivcal-calendar-id
 .agentcal-fired-ids.json
+.aiciv-inbox-state.json
 .env
 __pycache__/
 *.pyc
