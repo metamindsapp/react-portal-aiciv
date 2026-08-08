@@ -5,10 +5,12 @@ on:
     paths:
       - "presence_bridge.py"
       - "aiciv_inbox.py"
+      - "aiciv_projects.py"
       - "portal_entrypoint.py"
       - "start.sh"
       - "test_presence_bridge.py"
       - "test_aiciv_inbox.py"
+      - "test_aiciv_projects.py"
       - "react-portal/**"
       - ".github/workflows/portal-voice-ci.yml"
   push:
@@ -16,10 +18,12 @@ on:
     paths:
       - "presence_bridge.py"
       - "aiciv_inbox.py"
+      - "aiciv_projects.py"
       - "portal_entrypoint.py"
       - "start.sh"
       - "test_presence_bridge.py"
       - "test_aiciv_inbox.py"
+      - "test_aiciv_projects.py"
       - "react-portal/**"
       - ".github/workflows/portal-voice-ci.yml"
 
@@ -38,11 +42,13 @@ jobs:
       - name: Install focused Portal test dependencies
         run: pip install starlette httpx
       - name: Compile AICIV extension modules
-        run: python -m py_compile presence_bridge.py aiciv_inbox.py portal_entrypoint.py
+        run: python -m py_compile presence_bridge.py aiciv_inbox.py aiciv_projects.py portal_entrypoint.py
       - name: Run Presence bridge tests
         run: python test_presence_bridge.py
       - name: Run shared AICIV inbox tests
         run: python test_aiciv_inbox.py
+      - name: Run shared AICIV project tests
+        run: python test_aiciv_projects.py
 
   frontend:
     runs-on: ubuntu-latest
@@ -60,9 +66,6 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
       - name: Audit shipped production dependencies
-        # Dev/build tooling advisories remain visible in npm output, while
-        # high/critical vulnerabilities reachable from the production tree
-        # block client-facing releases.
         run: npm audit --omit=dev --audit-level=high
       - run: npm run build
       - run: npm test
