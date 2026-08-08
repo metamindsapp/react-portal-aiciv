@@ -11,16 +11,21 @@
 }
 
 .header-left {
+  min-width: 0;
   display: flex;
   align-items: baseline;
   gap: 8px;
 }
 
 .header-brand-link {
+  min-width: 0;
   text-decoration: none !important;
 }
 
 .header-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--font-display);
   font-size: 20px;
   font-weight: 600;
@@ -33,6 +38,7 @@
 }
 
 .header-subtitle {
+  flex: 0 0 auto;
   font-size: 13px;
   color: var(--text-tertiary);
   font-weight: 500;
@@ -41,10 +47,10 @@
 .header-right {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: flex-end;
+  gap: 10px;
+  flex: 0 0 auto;
 }
-
-/* ── Mini ring context indicator ──────────────────────── */
 
 .header-ctx-link {
   display: flex;
@@ -71,6 +77,20 @@
 
 @media (max-width: 768px) {
   .header {
-    padding: 0 12px;
+    padding: 0 10px;
+  }
+
+  .header-subtitle {
+    display: none;
+  }
+
+  .header-right {
+    gap: 6px;
+  }
+}
+
+@media (max-width: 430px) {
+  .header-ctx-link {
+    display: none;
   }
 }
