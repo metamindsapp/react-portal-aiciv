@@ -1,14 +1,5 @@
 #!/usr/bin/env python3
-"""Shared evidence objects captured from human/AICIV co-control surfaces.
-
-Evidence metadata is small and durable. Binary screenshots remain owned by the
-existing Portal upload subsystem; this store records the reference, source page,
-optional project/job relationship hints, and a human note.
-
-A saved evidence object is NOT automatically a Presence job completion receipt.
-The durable AICIV may later cite it in a callback receipt after verifying that it
-supports the work being reported.
-"""
+"""Shared evidence objects captured from human/AICIV co-control surfaces."""
 
 from __future__ import annotations
 
@@ -24,6 +15,8 @@ from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
+
+from aiciv_activity import record_activity
 
 AuthChecker = Callable[[Request], bool]
 
@@ -72,11 +65,7 @@ class EvidenceStore:
 
     def create(self, payload: dict) -> dict:
         created_at = _utc_now()
-        seed = "|".join([
-            str(payload.get("artifactUrl") or ""),
-            str(payload.get("pageUrl") or ""),
-            created_at,
-        ])
+        seed = "|".join([str(payload.get("artifactUrl") or ""), str(payload.get("pageUrl") or ""), created_at])
         evidence_id = "evidence_" + hashlib.sha256(seed.encode()).hexdigest()[:20]
         item = {
             "id": evidence_id,
@@ -141,6 +130,19 @@ def build_evidence_routes(*, check_auth: AuthChecker, store: EvidenceStore | Non
         if not isinstance(page_url, str) or not page_url.strip():
             return JSONResponse({"error": "invalid_page_url"}, status_code=400)
         item = evidence.create(body)
+        record_activity(
+            kind="evidence.saved",
+            object_kind="evidence",
+            object_id=item["id"],
+            summary=f"Saved browser evidence from {item.get('title') or item.get('pageUrl') or 'shared browser'}",
+            actor="human",
+            metadata={
+                "pageUrl": item.get("pageUrl", ""),
+                "projectId": item.get("projectId"),
+                "jobId": item.get("jobId"),
+                "semanticReceipt": item.get("semanticReceipt"),
+            },
+        )
         return JSONResponse({"evidence": item}, status_code=201)
 
     return [
@@ -150,10 +152,7 @@ def build_evidence_routes(*, check_auth: AuthChecker, store: EvidenceStore | Non
 
 
 def register_evidence_routes(app: Starlette, *, check_auth: AuthChecker, store: EvidenceStore | None = None) -> None:
-    existing = {getattr(route, "path", None) for route in app.routes}
     for route in build_evidence_routes(check_auth=check_auth, store=store):
-        # Same path appears twice with different methods; keep both unless the
-        # exact endpoint+method set is already registered by this extension.
         duplicate = any(
             getattr(existing_route, "path", None) == route.path
             and getattr(existing_route, "methods", None) == route.methods
