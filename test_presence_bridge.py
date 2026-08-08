@@ -11,7 +11,7 @@ import httpx
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
 
-from presence_bridge import PresenceBridgeConfig, register_presence_routes
+from presence_bridge import PresenceBridgeConfig, SlidingWindowLimiter, register_presence_routes
 
 
 class FakeAsyncClient:
@@ -35,6 +35,17 @@ class FakeAsyncClient:
         return self.response
 
 
+class FakeClock:
+    def __init__(self, start: float = 1000.0):
+        self.now = start
+
+    def __call__(self) -> float:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
+
+
 class PresenceBridgeTests(unittest.TestCase):
     def build_client(
         self,
@@ -42,6 +53,7 @@ class PresenceBridgeTests(unittest.TestCase):
         configured: bool = True,
         upstream_response: httpx.Response | None = None,
         upstream_error: Exception | None = None,
+        token_limiter: SlidingWindowLimiter | None = None,
     ) -> tuple[TestClient, FakeAsyncClient]:
         config = PresenceBridgeConfig(
             gateway_url="https://presence.internal.example" if configured else "",
@@ -60,6 +72,7 @@ class PresenceBridgeTests(unittest.TestCase):
             human_name="Corey",
             config=config,
             http_client_factory=lambda: fake_http,
+            token_limiter=token_limiter,
         )
         # Double registration must remain a no-op; wrapper imports/reloads should
         # never create duplicate matching routes.
@@ -70,6 +83,7 @@ class PresenceBridgeTests(unittest.TestCase):
             human_name="Corey",
             config=config,
             http_client_factory=lambda: fake_http,
+            token_limiter=token_limiter,
         )
         return TestClient(app), fake_http
 
@@ -118,21 +132,20 @@ class PresenceBridgeTests(unittest.TestCase):
         # Long-lived gateway auth must never appear in the response body.
         self.assertNotIn("gateway-super-secret", response.text)
 
-    def test_custom_participant_label_is_bounded_and_not_identity_authority(self):
+    def test_browser_participant_label_is_ignored_in_favor_of_portal_identity(self):
         upstream = httpx.Response(
             200,
             json={"token": "voice-token", "conversationId": "conv_custom"},
         )
         client, fake_http = self.build_client(upstream_response=upstream)
-        supplied = "portal-client-" + ("x" * 400)
 
         response = client.post(
             "/api/presence/voice/token",
             headers={"Authorization": "Bearer portal-user-token"},
-            json={"participantName": supplied},
+            json={"participantName": "I-am-definitely-someone-else"},
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(fake_http.requests[0]["json"]["participantName"]), 160)
+        self.assertEqual(fake_http.requests[0]["json"]["participantName"], "synth:Corey:portal")
 
     def test_unconfigured_bridge_fails_closed_without_network_call(self):
         client, fake_http = self.build_client(configured=False)
@@ -170,6 +183,41 @@ class PresenceBridgeTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 502)
         self.assertEqual(response.json(), {"error": "invalid_voice_token_response"})
+
+    def test_authenticated_token_minting_is_rate_limited_before_upstream_call(self):
+        upstream = httpx.Response(200, json={"token": "voice-token", "conversationId": "conv_rate"})
+        clock = FakeClock()
+        limiter = SlidingWindowLimiter(limit=2, window_seconds=60, clock=clock)
+        client, fake_http = self.build_client(upstream_response=upstream, token_limiter=limiter)
+        headers = {"Authorization": "Bearer portal-user-token"}
+
+        self.assertEqual(client.post("/api/presence/voice/token", headers=headers).status_code, 200)
+        self.assertEqual(client.post("/api/presence/voice/token", headers=headers).status_code, 200)
+        limited = client.post("/api/presence/voice/token", headers=headers)
+
+        self.assertEqual(limited.status_code, 429)
+        self.assertEqual(limited.json(), {"error": "voice_token_rate_limited"})
+        self.assertEqual(limited.headers.get("Retry-After"), "60")
+        self.assertEqual(len(fake_http.requests), 2)
+
+        clock.advance(60)
+        self.assertEqual(client.post("/api/presence/voice/token", headers=headers).status_code, 200)
+        self.assertEqual(len(fake_http.requests), 3)
+
+    def test_unauthenticated_requests_do_not_consume_rate_limit(self):
+        upstream = httpx.Response(200, json={"token": "voice-token", "conversationId": "conv_auth"})
+        limiter = SlidingWindowLimiter(limit=1, window_seconds=60, clock=FakeClock())
+        client, fake_http = self.build_client(upstream_response=upstream, token_limiter=limiter)
+
+        for _ in range(5):
+            self.assertEqual(client.post("/api/presence/voice/token").status_code, 401)
+
+        allowed = client.post(
+            "/api/presence/voice/token",
+            headers={"Authorization": "Bearer portal-user-token"},
+        )
+        self.assertEqual(allowed.status_code, 200)
+        self.assertEqual(len(fake_http.requests), 1)
 
 
 if __name__ == "__main__":
